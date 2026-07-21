@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fdfdfd;
+  --foreground: #000d19;
+  --page: #fdfdfd;
+  --ink: #000d19;
+  --brand: #f5294d;
+  --brand-deep: #eb0029;
+  --nav: #f9f9f9;
+  --search: #f2f2f2;
+  --muted: #7c7c7c;
+  --offer-static: rgba(237, 237, 237, 0.3);
+  --offer-hover: rgba(255, 221, 204, 0.25);
+  --merchant: rgba(255, 221, 204, 0.25);
+  --footer: rgba(237, 237, 237, 0.2);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-page: var(--page);
+  --color-ink: var(--ink);
+  --color-brand: var(--brand);
+  --color-brand-deep: var(--brand-deep);
+  --color-nav: var(--nav);
+  --color-search: var(--search);
+  --color-muted: var(--muted);
+  --color-offer-static: var(--offer-static);
+  --color-offer-hover: var(--offer-hover);
+  --color-merchant: var(--merchant);
+  --color-footer: var(--footer);
+  --font-sans: var(--font-poppins);
+  --font-display: var(--font-playfair);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-poppins), system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-playfair), Georgia, serif;
+}
+
+.btn-primary {
+  display: inline-flex;
+  height: 43px;
+  min-width: 119px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1.5px solid var(--brand);
+  background: var(--brand);
+  padding-inline: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #fff;
+  transition:
+    background-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.btn-primary:hover {
+  background: #ff4d6d;
+  box-shadow: 0 0 16px 2px rgba(245, 41, 77, 0.32);
+}
+
+.btn-primary:active {
+  background: #e01f42;
+  box-shadow: 0 0 10px 1px rgba(245, 41, 77, 0.24);
+}
+
+.btn-ink {
+  border: 1.5px solid var(--ink);
+  background: var(--ink);
+  color: #fff;
+  transition:
+    background-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.btn-ink:hover {
+  background: #243040;
+  box-shadow: 0 0 14px 2px rgba(0, 13, 25, 0.24);
+}
+
+.btn-ink:active {
+  background: #111820;
+  box-shadow: 0 0 8px 1px rgba(0, 13, 25, 0.18);
+}
+
+.reveal-section {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-section.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-section.is-visible .reveal-item {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-item {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal-section,
+  .reveal-item,
+  .reveal-section.is-visible,
+  .reveal-section.is-visible .reveal-item {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
