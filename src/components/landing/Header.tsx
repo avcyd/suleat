@@ -1,7 +1,15 @@
 "use client";
 
+/**
+ * Header (CHANGED for auth)
+ * -------------------------
+ * - useSession() → know if someone is logged in
+ * - Guest dropdown → Login / Register
+ * - Signed-in dropdown → Account / Logout (signOut)
+ */
 import Image from "next/image";
 import Link from "next/link";
+import { signOut, useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { navLinks } from "@/data";
@@ -9,11 +17,14 @@ import { Logo } from "./Logo";
 
 export function Header() {
   const pathname = usePathname();
+  const { data: session, status } = useSession();
   const [scrolled, setScrolled] = useState(false);
   const [query, setQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
+
+  const isAuthenticated = status === "authenticated" && !!session?.user;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -124,22 +135,49 @@ export function Header() {
               }`}
             >
               <div className="overflow-hidden rounded-2xl border border-black/5 bg-white py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.1)]">
-                <Link
-                  href="/account"
-                  role="menuitem"
-                  className="block px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
-                  onClick={() => setAccountOpen(false)}
-                >
-                  Account
-                </Link>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="block w-full px-4 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
-                  onClick={() => setAccountOpen(false)}
-                >
-                  Logout
-                </button>
+                {isAuthenticated ? (
+                  <>
+                    <Link
+                      href="/account"
+                      role="menuitem"
+                      className="block px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
+                      onClick={() => setAccountOpen(false)}
+                    >
+                      Account
+                    </Link>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="block w-full px-4 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        // Clears the NextAuth session cookie and redirects home.
+                        void signOut({ callbackUrl: "/" });
+                      }}
+                    >
+                      Logout
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/login"
+                      role="menuitem"
+                      className="block px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
+                      onClick={() => setAccountOpen(false)}
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href="/register"
+                      role="menuitem"
+                      className="block px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
+                      onClick={() => setAccountOpen(false)}
+                    >
+                      Register
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </div>

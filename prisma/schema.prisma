@@ -11,3 +11,107 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum UserRole {
+  USER
+  ADMIN
+  MERCHANT
+}
+
+enum PromotionType {
+  DISCOUNT
+  BUNDLE
+}
+
+enum BundleType {
+  PERCENTAGE_OFF
+  FREE
+}
+
+enum Category {
+  BEVERAGE
+  PASTRY
+  PASTA
+  DESSERT
+  BURGER
+  PIZZA
+  CHICKEN
+  PORK
+}
+
+model User {
+  id           String    @id @default(cuid())
+  displayName  String
+  email        String    @unique
+  passwordHash String
+  role         UserRole
+  merchant     Merchant?
+}
+
+model Merchant {
+  id                 String     @id @default(cuid())
+  userId             String     @unique
+  user               User       @relation(fields: [userId], references: [id])
+  companyName        String
+  phoneNumber        String     @unique
+  verificationStatus Boolean
+  taxId              String
+  businesses         Business[]
+}
+
+model Business {
+  id                String      @id @default(cuid())
+  merchantId        String
+  merchant          Merchant    @relation(fields: [merchantId], references: [id])
+  businessName      String
+  dateEstablishment DateTime
+  description       String
+  coverPhoto        String
+  menu              Menu[]
+  promotion         Promotion[]
+  branch            Branch[]
+}
+
+model Branch {
+  id         String   @id @default(cuid())
+  number     String
+  building   String?
+  street     String
+  barangay   String
+  city       String
+  province   String
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+}
+
+model Menu {
+  id          String   @id @default(cuid())
+  // INSERT FKS
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id])
+  itemName    String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  category    Category
+  isAvailable Boolean
+}
+
+model Promotion {
+  id         String   @id @default(cuid())
+  // INSERT FKS
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+
+  caption               String
+  description           String
+  promotionType         PromotionType
+  discountPercent       Int? // used only if promotionType==DISCOUNT
+  bundleType            BundleType? // used only if promotionType==BUNDLE
+  buyQuantity           Int? // used only if bundleType==FREE
+  getQuantity           Int? // used only if bundleType==FREE
+  bundleDiscountPercent Int? // used only if bundleType==PERCENTAGE_OFF
+  startDate             DateTime
+  endDate               DateTime
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
