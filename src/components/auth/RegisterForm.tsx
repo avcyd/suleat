@@ -1,28 +1,26 @@
 "use client";
 
 /**
- * Register form (client)
- * ----------------------
- * Submits to the `registerUser` Server Action (src/actions/auth.ts).
- * On success, auto-signs in via NextAuth credentials so the user lands logged in.
+ * Register form styled to match Figma Register Page.
  */
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { registerUser, type AuthActionState } from "@/actions/auth";
+import { Logo } from "@/components/layout";
 
 const initialState: AuthActionState = {
   ok: false,
   message: "",
 };
 
+const fieldClass =
+  "w-full rounded-[10px] bg-search px-5 py-3 text-sm text-ink outline-none transition-shadow placeholder:text-muted focus:ring-1 focus:ring-ink/15";
+
 export function RegisterForm() {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(registerUser, initialState);
-
-  // Keep a copy of credentials so we can call signIn after the Server Action succeeds.
-  // (FormData is not available anymore once the action finishes.)
   const [credentials, setCredentials] = useState({ email: "", password: "" });
 
   useEffect(() => {
@@ -48,102 +46,123 @@ export function RegisterForm() {
   }, [state.ok, credentials, router]);
 
   return (
-    <form
-      action={(formData) => {
-        setCredentials({
-          email: String(formData.get("email") ?? ""),
-          password: String(formData.get("password") ?? ""),
-        });
-        formAction(formData);
-      }}
-      className="mx-auto flex w-full max-w-md flex-col gap-4"
-    >
-      <div>
-        <label
-          htmlFor="displayName"
-          className="mb-1.5 block text-sm font-medium text-ink"
+    <div className="mx-auto w-full max-w-[377px]">
+      <Logo size="sm" className="text-[20px]" />
+      <h1 className="mt-6 font-display text-[32px] font-semibold leading-tight text-ink">
+        Create your account
+      </h1>
+      <p className="mt-2 text-sm text-[#4b4b4b]">
+        To continue, fill out the details.
+      </p>
+
+      <form
+        action={(formData) => {
+          setCredentials({
+            email: String(formData.get("email") ?? ""),
+            password: String(formData.get("password") ?? ""),
+          });
+          formAction(formData);
+        }}
+        className="mt-7 flex flex-col gap-4"
+      >
+        <div>
+          <label
+            htmlFor="displayName"
+            className="mb-2 block text-base font-medium text-ink"
+          >
+            Display Name
+          </label>
+          <input
+            id="displayName"
+            name="displayName"
+            type="text"
+            required
+            autoComplete="name"
+            placeholder="John Doe"
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="email"
+            className="mb-2 block text-base font-medium text-ink"
+          >
+            Email
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="john.doe@example.com"
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="password"
+            className="mb-2 block text-base font-medium text-ink"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            placeholder="***********"
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="confirmPassword"
+            className="mb-2 block text-base font-medium text-ink"
+          >
+            Confirm Password
+          </label>
+          <input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            placeholder="***********"
+            className={fieldClass}
+          />
+        </div>
+
+        {state.message ? (
+          <p
+            className={`text-sm font-medium ${state.ok ? "text-green-700" : "text-brand"}`}
+            role="alert"
+          >
+            {state.message}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="mt-1 flex h-[43px] w-full items-center justify-center rounded-[10px] bg-ink text-sm font-medium text-white transition-all duration-250 hover:bg-[#1a2430] hover:shadow-[0_0_16px_2px_rgba(0,13,25,0.22)] disabled:opacity-60"
         >
-          Display name
-        </label>
-        <input
-          id="displayName"
-          name="displayName"
-          type="text"
-          required
-          autoComplete="name"
-          className="w-full rounded-full bg-search px-5 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-        />
-      </div>
+          {pending ? "Creating account..." : "Create Account"}
+        </button>
+      </form>
 
-      <div>
-        <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-ink">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          className="w-full rounded-full bg-search px-5 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor="password"
-          className="mb-1.5 block text-sm font-medium text-ink"
-        >
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-          className="w-full rounded-full bg-search px-5 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor="confirmPassword"
-          className="mb-1.5 block text-sm font-medium text-ink"
-        >
-          Confirm password
-        </label>
-        <input
-          id="confirmPassword"
-          name="confirmPassword"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-          className="w-full rounded-full bg-search px-5 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-        />
-      </div>
-
-      {state.message ? (
-        <p
-          className={`text-sm font-medium ${state.ok ? "text-green-700" : "text-brand"}`}
-          role="alert"
-        >
-          {state.message}
-        </p>
-      ) : null}
-
-      <button type="submit" className="btn-primary w-full" disabled={pending}>
-        {pending ? "Creating account..." : "Create account"}
-      </button>
-
-      <p className="text-center text-sm text-[#363636]">
+      <p className="mt-5 text-center text-sm text-black">
         Already have an account?{" "}
-        <Link href="/login" className="font-semibold text-brand hover:text-brand-deep">
-          Sign in
+        <Link href="/login" className="text-brand hover:text-brand-deep">
+          Sign In
         </Link>
       </p>
-    </form>
+    </div>
   );
 }

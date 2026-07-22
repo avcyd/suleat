@@ -1,8 +1,11 @@
 "use client";
 
 /**
- * Header (CHANGED for auth)
- * -------------------------
+ * Global Navbar
+ * -------------
+ * Reusable site chrome. Mounted once via `app/(site)/layout.tsx`
+ * so every main page gets it without importing Header on each page.
+ *
  * - useSession() → know if someone is logged in
  * - Guest dropdown → Login / Register
  * - Signed-in dropdown → Account / Logout (signOut)
@@ -15,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { navLinks } from "@/data";
 import { Logo } from "./Logo";
 
-export function Header() {
+export function Navbar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const [scrolled, setScrolled] = useState(false);
@@ -25,6 +28,10 @@ export function Header() {
   const accountRef = useRef<HTMLDivElement>(null);
 
   const isAuthenticated = status === "authenticated" && !!session?.user;
+  const isMerchant = session?.user?.role === "MERCHANT";
+  // Offers / merchant dashboard have their own search UX — hide navbar search.
+  const showNavbarSearch =
+    pathname !== "/offers" && !pathname.startsWith("/merchant");
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -65,13 +72,20 @@ export function Header() {
       >
         <Logo size="sm" className="shrink-0 sm:text-[28px] lg:text-[32px]" />
 
-        <div className="ml-auto flex min-w-0 items-center gap-2 sm:w-[58%] sm:gap-3">
+        <div
+          className={`ml-auto flex min-w-0 items-center gap-2 sm:gap-3 ${
+            showNavbarSearch ? "sm:w-[58%]" : ""
+          }`}
+        >
           <nav
             className="hidden shrink-0 items-center gap-1 md:flex"
             aria-label="Primary"
           >
             {navLinks.map((link) => {
-              const isActive = pathname === link.href;
+              const isActive =
+                link.href === "/"
+                  ? pathname === "/"
+                  : pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
                   key={link.href}
@@ -88,20 +102,22 @@ export function Header() {
             })}
           </nav>
 
-          <form
-            className="relative hidden min-w-0 flex-1 sm:block"
-            onSubmit={(event) => event.preventDefault()}
-            role="search"
-          >
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search..."
-              className="w-full rounded-full bg-search px-5 py-2.5 text-sm font-medium text-ink outline-none transition-colors placeholder:text-muted focus:bg-[#ececec] focus:ring-1 focus:ring-ink/10"
-              aria-label="Search offers"
-            />
-          </form>
+          {showNavbarSearch ? (
+            <form
+              className="relative hidden min-w-0 flex-1 sm:block"
+              onSubmit={(event) => event.preventDefault()}
+              role="search"
+            >
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search..."
+                className="w-full rounded-full bg-search px-5 py-2.5 text-sm font-medium text-ink outline-none transition-colors placeholder:text-muted focus:bg-[#ececec] focus:ring-1 focus:ring-ink/10"
+                aria-label="Search offers"
+              />
+            </form>
+          ) : null}
 
           <div
             ref={accountRef}
@@ -145,13 +161,22 @@ export function Header() {
                     >
                       Account
                     </Link>
+                    {isMerchant ? (
+                      <Link
+                        href="/merchant/dashboard"
+                        role="menuitem"
+                        className="block px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        Dashboard
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       role="menuitem"
                       className="block w-full px-4 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
                       onClick={() => {
                         setAccountOpen(false);
-                        // Clears the NextAuth session cookie and redirects home.
                         void signOut({ callbackUrl: "/" });
                       }}
                     >
@@ -225,22 +250,27 @@ export function Header() {
               </Link>
             ))}
           </nav>
-          <form
-            className="mt-3"
-            onSubmit={(event) => event.preventDefault()}
-            role="search"
-          >
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search..."
-              className="w-full rounded-full bg-search px-5 py-3 text-sm font-medium text-ink outline-none placeholder:text-muted"
-              aria-label="Search offers"
-            />
-          </form>
+          {showNavbarSearch ? (
+            <form
+              className="mt-3"
+              onSubmit={(event) => event.preventDefault()}
+              role="search"
+            >
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search..."
+                className="w-full rounded-full bg-search px-5 py-3 text-sm font-medium text-ink outline-none placeholder:text-muted"
+                aria-label="Search offers"
+              />
+            </form>
+          ) : null}
         </div>
       ) : null}
     </header>
   );
 }
+
+/** @deprecated Prefer `Navbar` — kept as an alias for older imports. */
+export const Header = Navbar;

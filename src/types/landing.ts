@@ -30,6 +30,8 @@ export type Offer = {
   discountLabel: string;
   expiresAt: string;
   href: string;
+  /** Used for offers page category filters */
+  category: string;
 };
 
 export type FooterColumn = {

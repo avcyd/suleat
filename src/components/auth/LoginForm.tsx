@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * Login form (client)
- * -------------------
- * Uses next-auth's signIn("credentials") which POSTs to /api/auth/[...nextauth].
- * We keep this on the client because signIn manages cookies/CSRF for us.
+ * Login form styled to match Figma Login Page.
  */
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { Logo } from "@/components/layout";
+
+const fieldClass =
+  "w-full rounded-[10px] bg-search px-5 py-3 text-sm text-ink outline-none transition-shadow placeholder:text-muted focus:ring-1 focus:ring-ink/15";
 
 export function LoginForm() {
   const router = useRouter();
@@ -25,7 +26,6 @@ export function LoginForm() {
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
 
-    // redirect: false → we handle success/error in this component.
     const result = await signIn("credentials", {
       email,
       password,
@@ -44,54 +44,73 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto flex w-full max-w-md flex-col gap-4">
-      <div>
-        <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-ink">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          className="w-full rounded-full bg-search px-5 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-        />
-      </div>
+    <div className="mx-auto w-full max-w-[377px]">
+      <Logo size="sm" className="text-[20px]" />
+      <h1 className="mt-8 font-display text-[32px] font-semibold leading-tight text-ink">
+        Welcome back!
+      </h1>
+      <p className="mt-2 text-sm text-[#4b4b4b]">
+        Enter your email and password to log in.
+      </p>
 
-      <div>
-        <label
-          htmlFor="password"
-          className="mb-1.5 block text-sm font-medium text-ink"
+      <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-5">
+        <div>
+          <label
+            htmlFor="email"
+            className="mb-2 block text-base font-medium text-ink"
+          >
+            Email
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="john.doe@example.com"
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="password"
+            className="mb-2 block text-base font-medium text-ink"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="***********"
+            className={fieldClass}
+          />
+        </div>
+
+        {error ? (
+          <p className="text-sm font-medium text-brand" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="flex h-[43px] w-full items-center justify-center rounded-[10px] bg-ink text-sm font-medium text-white transition-all duration-250 hover:bg-[#1a2430] hover:shadow-[0_0_16px_2px_rgba(0,13,25,0.22)] disabled:opacity-60"
         >
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          className="w-full rounded-full bg-search px-5 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-        />
-      </div>
+          {pending ? "Signing in..." : "Login"}
+        </button>
+      </form>
 
-      {error ? (
-        <p className="text-sm font-medium text-brand" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <button type="submit" className="btn-primary w-full" disabled={pending}>
-        {pending ? "Signing in..." : "Sign in"}
-      </button>
-
-      <p className="text-center text-sm text-[#363636]">
-        No account yet?{" "}
-        <Link href="/register" className="font-semibold text-brand hover:text-brand-deep">
-          Create one
+      <p className="mt-5 text-center text-sm text-black">
+        Don&apos;t have an account?{" "}
+        <Link href="/register" className="text-brand hover:text-brand-deep">
+          Sign Up
         </Link>
       </p>
-    </form>
+    </div>
   );
 }

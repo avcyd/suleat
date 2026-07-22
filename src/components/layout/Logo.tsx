@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+/**
+ * Shared brand logo — used by Navbar, Footer, and auth pages.
+ */
 type LogoProps = {
   className?: string;
   size?: "sm" | "md" | "lg";

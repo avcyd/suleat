@@ -3,9 +3,14 @@ import Link from "next/link";
 import { footerBlurb, footerColumns, socialLinks } from "@/data";
 import { Logo } from "./Logo";
 
+/**
+ * Global Footer
+ * -------------
+ * Reusable site chrome. Mounted once via `app/(site)/layout.tsx`.
+ */
 export function Footer() {
   return (
-    <footer className="mt-10 bg-footer">
+    <footer className="mt-auto bg-footer">
       <div className="mx-auto grid max-w-[914px] gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1.2fr_repeat(3,minmax(0,1fr))]">
         <div>
           <Logo />

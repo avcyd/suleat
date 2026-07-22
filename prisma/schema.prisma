@@ -73,7 +73,7 @@ model Business {
 }
 
 model Branch {
-  id         String   @id @default(cuid())
+  id         String      @id @default(cuid())
   number     String
   building   String?
   street     String
@@ -81,12 +81,12 @@ model Branch {
   city       String
   province   String
   businessId String
-  business   Business @relation(fields: [businessId], references: [id])
+  business   Business    @relation(fields: [businessId], references: [id])
+  promotion  Promotion[]
 }
 
 model Menu {
   id          String   @id @default(cuid())
-  // INSERT FKS
   businessId  String
   business    Business @relation(fields: [businessId], references: [id])
   itemName    String
@@ -98,9 +98,11 @@ model Menu {
 
 model Promotion {
   id         String   @id @default(cuid())
-  // INSERT FKS
   businessId String
   business   Business @relation(fields: [businessId], references: [id])
+  /// Branch where this promotion is effective (one business can have many branches)
+  branchId   String
+  branch     Branch   @relation(fields: [branchId], references: [id])
 
   caption               String
   description           String
