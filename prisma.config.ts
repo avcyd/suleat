@@ -4,19 +4,51 @@ import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
 /**
- * Prisma CLI (migrate, db push, etc.) must use a *direct* Postgres URL.
- * Pooled hosts (pooled.db.prisma.io) break session advisory locks → P1002 on
- * `prisma migrate deploy` (common on Vercel builds).
+ * Prisma CLI (migrate, db push, etc.) needs a direct Postgres URL.
+ * Pooled hosts (pooled.db.prisma.io) break session advisory locks → P1002.
  *
- * App runtime keeps using DATABASE_URL (pooled) via the driver adapter in src/lib/prisma.ts.
- * Set DIRECT_URL in Vercel/.env to the same credentials with host `db.prisma.io`.
+ * App runtime still uses DATABASE_URL (pooled) in src/lib/prisma.ts.
  */
+function cleanEnvUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  let url = value.trim();
+  // Vercel/env pastes sometimes keep surrounding quotes in the value.
+  if (
+    (url.startsWith('"') && url.endsWith('"')) ||
+    (url.startsWith("'") && url.endsWith("'"))
+  ) {
+    url = url.slice(1, -1).trim();
+  }
+  return url || undefined;
+}
+
+function isPostgresUrl(url: string): boolean {
+  return /^postgres(ql)?:\/\//i.test(url);
+}
+
+function resolveMigrateUrl(): string | undefined {
+  const direct = cleanEnvUrl(process.env.DIRECT_URL);
+  if (direct && isPostgresUrl(direct)) {
+    return direct;
+  }
+
+  const databaseUrl = cleanEnvUrl(process.env.DATABASE_URL);
+  if (!databaseUrl) return undefined;
+
+  // Derive a direct Prisma Postgres host when only the pooled URL is set.
+  if (databaseUrl.includes("@pooled.db.prisma.io")) {
+    return databaseUrl.replace("@pooled.db.prisma.io", "@db.prisma.io");
+  }
+
+  return databaseUrl;
+}
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    url: resolveMigrateUrl(),
   },
 });
