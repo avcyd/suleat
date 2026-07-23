@@ -16,7 +16,7 @@ const offerInclude = {
       merchant: { select: { companyName: true } },
     },
   },
-  menu: { select: { id: true, itemName: true, price: true, category: true } },
+  menu: { select: { itemName: true, price: true, category: true } },
   branch: {
     select: {
       number: true,
@@ -47,12 +47,13 @@ export async function listLatestOffers(limit = 5) {
   });
 }
 
-/** All active promotions for the offers browse page. */
-export async function listActiveOffers() {
+/** All active promotions for the offers browse page (capped for page load). */
+export async function listActiveOffers(limit = 80) {
   return prisma.promotion.findMany({
     where: activeWhere(),
     include: offerInclude,
     orderBy: { createdAt: "desc" },
+    take: limit,
   });
 }
 

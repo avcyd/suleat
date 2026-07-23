@@ -5,7 +5,7 @@
  * --------------------
  * ADMIN-only mutations: user role (access control) and post deletion.
  */
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getSession } from "@/lib/session";
 import {
   approveMerchantRequest,
@@ -35,6 +35,12 @@ async function requireAdmin() {
 
 function refreshAdmin() {
   revalidatePath("/admin/dashboard");
+}
+
+function refreshPublicOffers() {
+  updateTag("offers");
+  revalidatePath("/");
+  revalidatePath("/offers");
 }
 
 export async function updateUserRoleAction(
@@ -85,6 +91,7 @@ export async function deletePostAction(
   try {
     await deletePost(postId);
     refreshAdmin();
+    refreshPublicOffers();
     return { ok: true, message: "Post deleted." };
   } catch (error) {
     return {
@@ -110,10 +117,9 @@ export async function deleteCompanyAction(
   try {
     await deleteCompany(merchantId);
     refreshAdmin();
+    refreshPublicOffers();
     revalidatePath("/merchants");
     revalidatePath("/merchant/dashboard");
-    revalidatePath("/");
-    revalidatePath("/offers");
     return { ok: true, message: "Company deleted." };
   } catch (error) {
     return {
@@ -139,9 +145,8 @@ export async function deleteBusinessAction(
   try {
     await deleteBusiness(businessId);
     refreshAdmin();
+    refreshPublicOffers();
     revalidatePath("/merchant/dashboard");
-    revalidatePath("/");
-    revalidatePath("/offers");
     return { ok: true, message: "Business deleted." };
   } catch (error) {
     return {

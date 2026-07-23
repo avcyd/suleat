@@ -13,8 +13,8 @@ type OfferSource = {
   buyQuantity: number | null;
   getQuantity: number | null;
   bundleDiscountPercent: number | null;
-  startDate: Date;
-  endDate: Date;
+  startDate: Date | string;
+  endDate: Date | string;
   business: {
     id: string;
     businessName: string;
@@ -36,15 +36,22 @@ type OfferSource = {
   };
 };
 
-function formatExpiresAt(date: Date): string {
+/** `unstable_cache` JSON-serializes Dates to strings — coerce before formatting. */
+function toDate(value: Date | string): Date {
+  if (value instanceof Date) return value;
+  return new Date(value);
+}
+
+function formatExpiresAt(value: Date | string): string {
+  const date = toDate(value);
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   const yy = String(date.getFullYear()).slice(-2);
   return `${mm}/${dd}/${yy}`;
 }
 
-function formatYmd(date: Date): string {
-  return date.toISOString().slice(0, 10);
+function formatYmd(value: Date | string): string {
+  return toDate(value).toISOString().slice(0, 10);
 }
 
 /** Title-case category label for offer filters (e.g. PASTRY → Pastry). */

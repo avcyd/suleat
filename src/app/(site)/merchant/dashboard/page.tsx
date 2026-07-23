@@ -2,7 +2,7 @@
  * /merchant/dashboard
  * -------------------
  * Loads merchant account, businesses (+ branches), menu, and promotions from the DB.
- * Access is based on an existing Merchant profile (not only the JWT role).
+ * Access is based on a verified Merchant profile (JWT role may lag after approval).
  */
 import { redirect } from "next/navigation";
 import { MerchantDashboard } from "@/components/merchant";
@@ -22,7 +22,7 @@ import { getPromotionsForUser } from "@/services/promotion.service";
 export default async function MerchantDashboardPage() {
   const session = await getSession();
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login?callbackUrl=/merchant/dashboard");
   }
 
@@ -31,11 +31,8 @@ export default async function MerchantDashboardPage() {
     select: { id: true, verificationStatus: true },
   });
 
+  // Verified merchant profile is the source of truth (JWT role can be stale).
   if (!merchantRow || !merchantRow.verificationStatus) {
-    redirect("/merchants");
-  }
-
-  if (session.user.role !== "MERCHANT") {
     redirect("/merchants");
   }
 

@@ -5,7 +5,7 @@
 import { OffersPageContent } from "@/components/offers/OffersPageContent";
 import { offerFilters, type OfferFilter } from "@/data/offers";
 import { toOffer } from "@/lib/offer-mappers";
-import { listActiveOffers } from "@/services/offer.service";
+import { getCachedActiveOffers } from "@/lib/offers-cache";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -28,7 +28,7 @@ export default async function OffersPage({
 }) {
   const params = await searchParams;
   const initialCategory = parseCategory(first(params.category));
-  const rows = await listActiveOffers();
+  const rows = await getCachedActiveOffers();
 
   return (
     <OffersPageContent

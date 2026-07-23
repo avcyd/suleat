@@ -15,6 +15,9 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
+/** How often to re-check role from DB on JWT callbacks (ms). */
+const ROLE_REFRESH_MS = 5 * 60 * 1000;
+
 export const authOptions: NextAuthOptions = {
   // Custom pages so NextAuth redirects to our UI instead of the default screen.
   pages: {
@@ -85,17 +88,26 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.roleCheckedAt = Date.now();
+        return token;
       }
 
-      // Keep role fresh (e.g. after becoming a merchant).
-      if (token.id) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { role: true },
-        });
-        if (dbUser) {
-          token.role = dbUser.role;
+      // Keep role reasonably fresh without a DB hit on every navigation/session poll.
+      const checkedAt =
+        typeof token.roleCheckedAt === "number" ? token.roleCheckedAt : 0;
+      if (token.id && Date.now() - checkedAt > ROLE_REFRESH_MS) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { role: true },
+          });
+          if (dbUser) {
+            token.role = dbUser.role;
+          }
+        } catch {
+          // Don't invalidate the session if the role refresh query fails.
         }
+        token.roleCheckedAt = Date.now();
       }
 
       return token;

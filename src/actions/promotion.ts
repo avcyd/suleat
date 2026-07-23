@@ -3,7 +3,7 @@
 /**
  * Promotion Server Actions — create/update/archive/delete for merchants.
  */
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getSession } from "@/lib/session";
 import { saveUploadedImage } from "@/lib/upload";
 import {
@@ -24,6 +24,7 @@ export type PromotionActionState = {
 };
 
 function refreshPaths() {
+  updateTag("offers");
   revalidatePath("/merchant/dashboard");
   revalidatePath("/");
   revalidatePath("/offers");

@@ -2,18 +2,17 @@
  * Auth proxy (Next.js 16+)
  * ------------------------
  * - /account/*, /merchant/*, /admin/* → require signed-in user
- * Role checks happen in the page (getSession runs the jwt callback and
- * can read the fresh role from the DB).
+ * Role checks happen in the page (getSession can read JWT + DB).
  */
 import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
-  const token = await getToken({
-    req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
+  const secret = process.env.NEXTAUTH_SECRET;
+  const token = secret
+    ? await getToken({ req: request, secret })
+    : null;
 
   const pathname = request.nextUrl.pathname;
 
@@ -27,5 +26,12 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/account/:path*", "/merchant/:path*", "/admin/:path*"],
+  matcher: [
+    "/account",
+    "/account/:path*",
+    "/merchant",
+    "/merchant/:path*",
+    "/admin",
+    "/admin/:path*",
+  ],
 };
