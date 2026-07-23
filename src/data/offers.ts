@@ -10,12 +10,38 @@ export const offerFilters = [
   "Dessert",
   "Chicken",
   "Pork",
+  "Other",
 ] as const;
 
 export type OfferFilter = (typeof offerFilters)[number];
 
+function mockOffer(
+  partial: Omit<
+    Offer,
+    | "businessId"
+    | "companyName"
+    | "startDate"
+    | "endDate"
+    | "menuItemName"
+    | "menuPrice"
+    | "promotionType"
+  > &
+    Partial<Offer>,
+): Offer {
+  return {
+    businessId: `biz-${partial.id}`,
+    companyName: partial.merchant,
+    startDate: "2026-07-01",
+    endDate: "2026-08-31",
+    menuItemName: "Featured item",
+    menuPrice: 150,
+    promotionType: "DISCOUNT",
+    ...partial,
+  };
+}
+
 export const latestOffers: Offer[] = [
-  {
+  mockOffer({
     id: "cafe-latte",
     title: "Get 20% off for Cafe Latte",
     description:
@@ -28,8 +54,9 @@ export const latestOffers: Offer[] = [
     expiresAt: "07/25/26",
     href: "/offers/cafe-latte",
     category: "Beverage",
-  },
-  {
+    discountPercent: 20,
+  }),
+  mockOffer({
     id: "donut-deal",
     title: "Buy 1 Get 1 on Classic Donuts",
     description:
@@ -41,8 +68,12 @@ export const latestOffers: Offer[] = [
     expiresAt: "08/12/26",
     href: "/offers/donut-deal",
     category: "Pastry",
-  },
-  {
+    promotionType: "BUNDLE",
+    bundleType: "FREE",
+    buyQuantity: 1,
+    getQuantity: 1,
+  }),
+  mockOffer({
     id: "burger-bundle",
     title: "Save 25% on Burger Bundles",
     description:
@@ -54,8 +85,9 @@ export const latestOffers: Offer[] = [
     expiresAt: "09/01/26",
     href: "/offers/burger-bundle",
     category: "Burger",
-  },
-  {
+    discountPercent: 25,
+  }),
+  mockOffer({
     id: "ube-frappe",
     title: "15% off Ube Frappes",
     description:
@@ -67,8 +99,9 @@ export const latestOffers: Offer[] = [
     expiresAt: "07/30/26",
     href: "/offers/ube-frappe",
     category: "Beverage",
-  },
-  {
+    discountPercent: 15,
+  }),
+  mockOffer({
     id: "pizza-slice",
     title: "Buy 2 Get 1 Free Pizza Slices",
     description:
@@ -80,8 +113,12 @@ export const latestOffers: Offer[] = [
     expiresAt: "08/05/26",
     href: "/offers/pizza-slice",
     category: "Pizza",
-  },
-  {
+    promotionType: "BUNDLE",
+    bundleType: "FREE",
+    buyQuantity: 2,
+    getQuantity: 1,
+  }),
+  mockOffer({
     id: "pasta-night",
     title: "30% off Pasta Night Sets",
     description:
@@ -93,5 +130,6 @@ export const latestOffers: Offer[] = [
     expiresAt: "08/18/26",
     href: "/offers/pasta-night",
     category: "Pasta",
-  },
+    discountPercent: 30,
+  }),
 ];

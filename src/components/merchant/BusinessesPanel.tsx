@@ -1,13 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState, useTransition } from "react";
+import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
 import {
+  addBranchAction,
   createBusinessAction,
   deleteBusinessAction,
   updateBusinessAction,
 } from "@/actions/business";
+import { SmartImage } from "@/components/ui/SmartImage";
+import { isAllowedImageSrc } from "@/lib/images";
 import type { BranchLocation, BusinessProfile, SortDirection } from "@/types/merchant";
 import { formatBranchAddress, formatBranchLabel } from "@/types/merchant";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -36,6 +38,17 @@ const emptyForm = {
   branches: [emptyBranch()] as BranchDraft[],
 };
 
+function todayYmd() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+const fieldClass =
+  "w-full rounded-lg bg-search px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ink/10";
+
 export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -48,6 +61,15 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
   const [form, setForm] = useState(emptyForm);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [newBranch, setNewBranch] = useState<BranchDraft>(emptyBranch());
+  const [branchError, setBranchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedId && !businesses.some((business) => business.id === selectedId)) {
+      setSelectedId(businesses[0]?.id ?? null);
+    }
+  }, [businesses, selectedId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -78,9 +100,16 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
     filtered[0] ??
     null;
 
+  function softRefresh() {
+    startTransition(() => {
+      router.refresh();
+    });
+  }
+
   function openCreate() {
     setMode("create");
     setFormError(null);
+    setFormSuccess(null);
     setForm(emptyForm);
   }
 
@@ -88,12 +117,60 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
     setSelectedId(business.id);
     setMode("edit");
     setFormError(null);
+    setFormSuccess(null);
+    setBranchError(null);
+    setNewBranch(emptyBranch());
     setForm({
       businessName: business.businessName,
       description: business.description,
       dateEstablishment: business.dateEstablishment,
       coverPhoto: business.coverPhoto,
       branches: business.branches.map((branch) => ({ ...branch })),
+    });
+  }
+
+  function handleAddBranch() {
+    if (!selected) return;
+    setBranchError(null);
+
+    const required = [
+      newBranch.number,
+      newBranch.street,
+      newBranch.barangay,
+      newBranch.city,
+      newBranch.province,
+    ];
+    if (required.some((value) => !value.trim())) {
+      setBranchError("Fill in unit/number, street, barangay, city, and province.");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.set("businessId", selected.id);
+    fd.set("number", newBranch.number.trim());
+    if (newBranch.building?.trim()) {
+      fd.set("building", newBranch.building.trim());
+    }
+    fd.set("street", newBranch.street.trim());
+    fd.set("barangay", newBranch.barangay.trim());
+    fd.set("city", newBranch.city.trim());
+    fd.set("province", newBranch.province.trim());
+
+    startTransition(async () => {
+      try {
+        const result = await addBranchAction({ ok: false, message: "" }, fd);
+        if (!result.ok) {
+          setBranchError(result.message);
+          return;
+        }
+        setNewBranch(emptyBranch());
+        setFormSuccess(result.message);
+        softRefresh();
+      } catch (error) {
+        setBranchError(
+          error instanceof Error ? error.message : "Could not add branch.",
+        );
+      }
     });
   }
 
@@ -110,12 +187,30 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
     }));
   }
 
+  function validateClient(): string | null {
+    if (!form.dateEstablishment) {
+      return "Establishment date is required.";
+    }
+    if (form.dateEstablishment > todayYmd()) {
+      return "Establishment date cannot be in the future.";
+    }
+    if (!isAllowedImageSrc(form.coverPhoto)) {
+      return "Cover photo must be a site path or an http(s) image URL.";
+    }
+    if (mode === "create" && form.branches.length === 0) {
+      return "Add at least one branch.";
+    }
+    return null;
+  }
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setFormError(null);
+    setFormSuccess(null);
 
-    if (mode === "create" && form.branches.length === 0) {
-      setFormError("Add at least one branch.");
+    const clientError = validateClient();
+    if (clientError) {
+      setFormError(clientError);
       return;
     }
 
@@ -123,41 +218,50 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
     fd.set("businessName", form.businessName);
     fd.set("description", form.description);
     fd.set("dateEstablishment", form.dateEstablishment);
-    fd.set("coverPhoto", form.coverPhoto);
+    fd.set("coverPhoto", form.coverPhoto.trim());
 
     startTransition(async () => {
-      if (mode === "create") {
-        const branches = form.branches.map((branch) => ({
-          number: branch.number.trim(),
-          building: branch.building?.trim() || undefined,
-          street: branch.street.trim(),
-          barangay: branch.barangay.trim(),
-          city: branch.city.trim(),
-          province: branch.province.trim(),
-        }));
-        fd.set("branches", JSON.stringify(branches));
-        const result = await createBusinessAction(
-          { ok: false, message: "" },
-          fd,
-        );
-        if (!result.ok) {
-          setFormError(result.message);
-          return;
+      try {
+        if (mode === "create") {
+          const branches = form.branches.map((branch) => ({
+            number: branch.number.trim(),
+            building: branch.building?.trim() || undefined,
+            street: branch.street.trim(),
+            barangay: branch.barangay.trim(),
+            city: branch.city.trim(),
+            province: branch.province.trim(),
+          }));
+          fd.set("branches", JSON.stringify(branches));
+          const result = await createBusinessAction(
+            { ok: false, message: "" },
+            fd,
+          );
+          if (!result.ok) {
+            setFormError(result.message);
+            return;
+          }
+          if (result.businessId) {
+            setSelectedId(result.businessId);
+          }
+          setFormSuccess(result.message);
+        } else if (mode === "edit" && selected) {
+          fd.set("businessId", selected.id);
+          const result = await updateBusinessAction(
+            { ok: false, message: "" },
+            fd,
+          );
+          if (!result.ok) {
+            setFormError(result.message);
+            return;
+          }
+          setFormSuccess(result.message);
         }
-      } else if (mode === "edit" && selected) {
-        fd.set("businessId", selected.id);
-        const result = await updateBusinessAction(
-          { ok: false, message: "" },
-          fd,
-        );
-        if (!result.ok) {
-          setFormError(result.message);
-          return;
-        }
-      }
 
-      setMode("view");
-      router.refresh();
+        setMode("view");
+        softRefresh();
+      } catch {
+        setFormError("Something went wrong. Please try again.");
+      }
     });
   }
 
@@ -165,52 +269,59 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
     if (!deleteId) return;
     const id = deleteId;
     setDeleteId(null);
+    setFormError(null);
     startTransition(async () => {
-      const result = await deleteBusinessAction(id);
-      if (!result.ok) {
-        setFormError(result.message);
-        return;
+      try {
+        const result = await deleteBusinessAction(id);
+        if (!result.ok) {
+          setFormError(result.message);
+          return;
+        }
+        setMode("view");
+        setSelectedId(null);
+        setFormSuccess(result.message);
+        softRefresh();
+      } catch {
+        setFormError("Could not delete business. Please try again.");
       }
-      setMode("view");
-      setSelectedId(null);
-      router.refresh();
     });
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-display text-2xl font-semibold text-ink">
-            Business Profiles
-          </h2>
-          <p className="mt-1 text-sm text-[#4b4b4b]">
-            Manage businesses and their branches — one business can have multiple
-            locations.
-          </p>
-        </div>
+    <div>
+      <div className="flex items-center gap-2 border-b border-black/6 px-4 py-3">
+        <SearchSortBar
+          query={query}
+          onQueryChange={setQuery}
+          sortLabel={sortDir === "asc" ? "A–Z" : "Z–A"}
+          onToggleSort={() =>
+            setSortDir((value) => (value === "asc" ? "desc" : "asc"))
+          }
+          placeholder="Search businesses…"
+        />
         <button
           type="button"
           onClick={openCreate}
           disabled={pending}
-          className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          className="shrink-0 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
-          Create Business
+          Add
         </button>
       </div>
 
-      <SearchSortBar
-        query={query}
-        onQueryChange={setQuery}
-        sortLabel={sortDir === "asc" ? "A → Z" : "Z → A"}
-        onToggleSort={() =>
-          setSortDir((value) => (value === "asc" ? "desc" : "asc"))
-        }
-        placeholder="Search businesses or branches..."
-      />
+      {(formError || formSuccess) && mode === "view" ? (
+        <p
+          className={`border-b border-black/6 px-4 py-2 text-xs ${
+            formError ? "bg-[#fff0e7] text-brand-deep" : "bg-emerald-50 text-emerald-800"
+          }`}
+          role={formError ? "alert" : "status"}
+        >
+          {formError ?? formSuccess}
+        </p>
+      ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.2fr)]">
-        <div className="space-y-3">
+      <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="max-h-[70vh] divide-y divide-black/5 overflow-y-auto border-b border-black/6 lg:border-b-0 lg:border-r">
           {filtered.map((business) => {
             const active = selected?.id === business.id && mode === "view";
             const primary = business.branches[0];
@@ -221,179 +332,206 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
                 onClick={() => {
                   setSelectedId(business.id);
                   setMode("view");
+                  setFormError(null);
+                  setFormSuccess(null);
                 }}
-                className={`w-full rounded-[14px] border p-4 text-left transition-colors ${
-                  active
-                    ? "border-brand/40 bg-offer-hover"
-                    : "border-transparent bg-offer-static hover:bg-offer-hover"
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+                  active ? "bg-merchant" : "hover:bg-black/[0.02]"
                 }`}
               >
-                <div className="flex gap-3">
-                  <div className="relative size-16 shrink-0 overflow-hidden rounded-[10px]">
-                    <Image
-                      src={business.coverPhoto}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      sizes="64px"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-ink">
-                      {business.businessName}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">
-                      {business.branches.length} branch
-                      {business.branches.length === 1 ? "" : "es"}
-                      {primary ? ` · ${primary.city}` : null}
-                    </p>
-                    <p className="mt-2 line-clamp-2 text-xs text-[#4b4b4b]">
-                      {business.description}
-                    </p>
-                  </div>
+                <div className="relative size-10 shrink-0 overflow-hidden rounded-md">
+                  <SmartImage
+                    src={business.coverPhoto}
+                    alt=""
+                    fill
+                    className="object-cover"
+                    sizes="40px"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {business.businessName}
+                  </p>
+                  <p className="truncate text-xs text-muted">
+                    {business.branches.length} loc.
+                    {primary ? ` · ${primary.city}` : ""}
+                  </p>
                 </div>
               </button>
             );
           })}
           {filtered.length === 0 ? (
-            <p className="rounded-[14px] bg-offer-static px-4 py-8 text-center text-sm text-[#4b4b4b]">
-              No businesses yet. Create your first profile.
+            <p className="px-4 py-10 text-center text-sm text-muted">
+              No businesses yet.
             </p>
           ) : null}
         </div>
 
-        <div className="rounded-[18px] border border-black/5 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:p-6">
+        <div className="p-4 sm:p-5">
           {mode === "view" && selected ? (
             <div>
-              <div className="relative mb-5 aspect-[16/7] overflow-hidden rounded-[14px]">
-                <Image
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="font-display text-xl font-semibold text-ink">
+                    {selected.businessName}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted">
+                    Est. {selected.dateEstablishment} ·{" "}
+                    {selected.branches.length} branch
+                    {selected.branches.length === 1 ? "" : "es"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(selected)}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-black/[0.04]"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteId(selected.id)}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/5"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative mt-4 aspect-[2.4/1] overflow-hidden rounded-lg">
+                <SmartImage
                   src={selected.coverPhoto}
                   alt=""
                   fill
                   className="object-cover"
-                  sizes="600px"
+                  sizes="500px"
                 />
               </div>
-              <h3 className="font-display text-2xl font-semibold text-ink">
-                {selected.businessName}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-[#4b4b4b]">
+
+              <p className="mt-3 text-sm leading-relaxed text-[#4b4b4b]">
                 {selected.description}
               </p>
-              <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-                <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Established
-                  </dt>
-                  <dd className="mt-1 font-medium">{selected.dateEstablishment}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Branches
-                  </dt>
-                  <dd className="mt-1 font-medium">{selected.branches.length}</dd>
-                </div>
-              </dl>
 
-              <div className="mt-5">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Locations
-                </h4>
-                <ul className="mt-2 space-y-2">
-                  {selected.branches.map((branch) => (
-                    <li
-                      key={branch.id}
-                      className="rounded-[10px] bg-search px-3 py-2.5 text-sm text-ink"
-                    >
-                      {formatBranchAddress(branch)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openEdit(selected)}
-                  className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white"
-                >
-                  Update Profile
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteId(selected.id)}
-                  className="rounded-full border border-brand px-5 py-2.5 text-sm font-medium text-brand"
-                >
-                  Delete Profile
-                </button>
-              </div>
+              <ul className="mt-4 space-y-1.5">
+                {selected.branches.map((branch) => (
+                  <li
+                    key={branch.id}
+                    className="rounded-md bg-search px-3 py-2 text-xs text-ink"
+                  >
+                    {formatBranchAddress(branch)}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
           {mode === "view" && !selected ? (
-            <p className="py-10 text-center text-sm text-[#4b4b4b]">
-              Select a business or create a new profile.
+            <p className="py-12 text-center text-sm text-muted">
+              Select a business or add a new one.
             </p>
           ) : null}
 
           {(mode === "create" || mode === "edit") && (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <h3 className="font-display text-2xl font-semibold text-ink">
-                {mode === "create"
-                  ? "Create Business Profile"
-                  : "Update Business Profile"}
-              </h3>
-              {(
-                [
-                  ["businessName", "Business name"],
-                  ["description", "Description"],
-                  ["dateEstablishment", "Date established"],
-                  ["coverPhoto", "Cover photo URL"],
-                ] as const
-              ).map(([key, label]) => (
-                <div key={key}>
-                  <label className="mb-1.5 block text-sm font-medium text-ink">
-                    {label}
-                  </label>
-                  {key === "description" ? (
-                    <textarea
-                      required
-                      rows={3}
-                      value={form[key]}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          [key]: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-                    />
-                  ) : (
-                    <input
-                      required
-                      type={key === "dateEstablishment" ? "date" : "text"}
-                      value={form[key]}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          [key]: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-                    />
-                  )}
-                </div>
-              ))}
+            <form onSubmit={handleSubmit} className="space-y-3" noValidate>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-ink">
+                  {mode === "create" ? "New business" : "Edit business"}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("view");
+                    setFormError(null);
+                    setFormSuccess(null);
+                  }}
+                  className="text-xs font-medium text-muted hover:text-ink"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Name
+                </label>
+                <input
+                  required
+                  value={form.businessName}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      businessName: event.target.value,
+                    }))
+                  }
+                  className={fieldClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Description
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={form.description}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
+                  }
+                  className={fieldClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Established
+                </label>
+                <input
+                  required
+                  type="date"
+                  max={todayYmd()}
+                  value={form.dateEstablishment}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      dateEstablishment: event.target.value,
+                    }))
+                  }
+                  className={fieldClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Cover image URL
+                </label>
+                <input
+                  required
+                  type="text"
+                  inputMode="url"
+                  placeholder="https://… or /images/…"
+                  value={form.coverPhoto}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      coverPhoto: event.target.value,
+                    }))
+                  }
+                  className={fieldClass}
+                />
+                <p className="mt-1 text-[11px] text-muted">
+                  Use a full http(s) link or a site path starting with /.
+                </p>
+              </div>
 
               {mode === "create" ? (
-                <div className="space-y-3 border-t border-black/5 pt-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-semibold text-ink">Branches</h4>
-                      <p className="text-xs text-muted">
-                        Add every location where this business operates.
-                      </p>
-                    </div>
+                <div className="space-y-2 border-t border-black/6 pt-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-ink">Branches</p>
                     <button
                       type="button"
                       onClick={() =>
@@ -402,21 +540,20 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
                           branches: [...prev.branches, emptyBranch()],
                         }))
                       }
-                      className="rounded-full border border-ink/15 px-3 py-1.5 text-xs font-medium text-ink hover:bg-black/5"
+                      className="text-xs font-medium text-brand"
                     >
-                      Add branch
+                      + Branch
                     </button>
                   </div>
-
                   {form.branches.map((branch, index) => (
                     <div
                       key={branch.id ?? `new-${index}`}
-                      className="space-y-3 rounded-[12px] bg-search p-3"
+                      className="space-y-2 rounded-lg bg-search p-2.5"
                     >
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                          Branch {index + 1}
-                        </p>
+                      <div className="flex justify-between">
+                        <span className="text-[11px] font-medium text-muted">
+                          #{index + 1}
+                        </span>
                         {form.branches.length > 1 ? (
                           <button
                             type="button"
@@ -428,17 +565,17 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
                                 ),
                               }))
                             }
-                            className="text-xs font-medium text-brand"
+                            className="text-[11px] font-medium text-brand"
                           >
                             Remove
                           </button>
                         ) : null}
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-2 sm:grid-cols-2">
                         {(
                           [
-                            ["number", "Unit / number"],
-                            ["building", "Building (optional)"],
+                            ["number", "Unit or number"],
+                            ["building", "Building"],
                             ["street", "Street"],
                             ["barangay", "Barangay"],
                             ["city", "City"],
@@ -449,7 +586,7 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
                             key={key}
                             className={key === "street" ? "sm:col-span-2" : ""}
                           >
-                            <label className="mb-1 block text-xs font-medium text-ink">
+                            <label className="mb-0.5 block text-[11px] text-muted">
                               {label}
                             </label>
                             <input
@@ -458,7 +595,7 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
                               onChange={(event) =>
                                 updateBranch(index, key, event.target.value)
                               }
-                              className="w-full rounded-[10px] bg-white px-3 py-2.5 text-sm outline-none"
+                              className="w-full rounded-md bg-white px-2.5 py-1.5 text-sm outline-none"
                             />
                           </div>
                         ))}
@@ -467,36 +604,90 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
                   ))}
                 </div>
               ) : (
-                <p className="rounded-[10px] bg-search px-3 py-2 text-xs text-muted">
-                  Branch locations stay as created. Core business details can be
-                  updated here.
-                </p>
+                <div className="space-y-2 border-t border-black/6 pt-3">
+                  <p className="text-xs font-semibold text-ink">Branches</p>
+                  <ul className="space-y-1.5">
+                    {selected?.branches.map((branch) => (
+                      <li
+                        key={branch.id}
+                        className="rounded-md bg-search px-3 py-2 text-xs text-ink"
+                      >
+                        {formatBranchAddress(branch)}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="space-y-2 rounded-lg bg-search p-2.5">
+                    <p className="text-[11px] font-medium text-muted">
+                      Add another location
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(
+                        [
+                          ["number", "Unit or number"],
+                          ["building", "Building"],
+                          ["street", "Street"],
+                          ["barangay", "Barangay"],
+                          ["city", "City"],
+                          ["province", "Province"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <div
+                          key={key}
+                          className={key === "street" ? "sm:col-span-2" : ""}
+                        >
+                          <label className="mb-0.5 block text-[11px] text-muted">
+                            {label}
+                          </label>
+                          <input
+                            required={key !== "building"}
+                            value={newBranch[key] ?? ""}
+                            onChange={(event) =>
+                              setNewBranch((prev) => ({
+                                ...prev,
+                                [key]: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-md bg-white px-2.5 py-1.5 text-sm outline-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {branchError ? (
+                      <p className="text-[11px] text-brand-deep" role="alert">
+                        {branchError}
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={handleAddBranch}
+                      className="rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                    >
+                      {pending ? "Adding…" : "Add branch"}
+                    </button>
+                  </div>
+                </div>
               )}
 
               {formError ? (
-                <p className="text-sm text-brand">{formError}</p>
+                <p className="rounded-lg bg-[#fff0e7] px-3 py-2 text-xs text-brand-deep" role="alert">
+                  {formError}
+                </p>
+              ) : null}
+              {formSuccess ? (
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800" role="status">
+                  {formSuccess}
+                </p>
               ) : null}
 
-              <div className="flex flex-wrap gap-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {pending
-                    ? "Saving…"
-                    : mode === "create"
-                      ? "Create"
-                      : "Save changes"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode("view")}
-                  className="rounded-full px-5 py-2.5 text-sm font-medium text-ink hover:bg-black/5"
-                >
-                  Cancel
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={pending}
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {pending ? "Saving…" : mode === "create" ? "Create" : "Save"}
+              </button>
             </form>
           )}
         </div>
@@ -504,8 +695,8 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
 
       <ConfirmDialog
         open={!!deleteId}
-        title="Delete business profile?"
-        message="This removes the business, its branches, and menu items."
+        title="Delete business?"
+        message="This removes the business, branches, and menu items."
         confirmLabel="Delete"
         onCancel={() => setDeleteId(null)}
         onConfirm={confirmDelete}

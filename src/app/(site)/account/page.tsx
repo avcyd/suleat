@@ -6,7 +6,9 @@
  */
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { AccountNotifications } from "@/components/account/AccountNotifications";
 import { getSession } from "@/lib/session";
+import { listNotifications } from "@/services/notification.service";
 
 export default async function AccountPage() {
   const session = await getSession();
@@ -14,6 +16,8 @@ export default async function AccountPage() {
   if (!session?.user) {
     redirect("/login");
   }
+
+  const notifications = await listNotifications(session.user.id);
 
   return (
     <main className="mx-auto max-w-[914px] px-4 py-10 sm:px-6">
@@ -39,10 +43,25 @@ export default async function AccountPage() {
         </div>
       </dl>
 
+      <AccountNotifications
+        notifications={notifications.map((item) => ({
+          id: item.id,
+          title: item.title,
+          message: item.message,
+          read: item.read,
+          createdAt: item.createdAt.toISOString().slice(0, 10),
+        }))}
+      />
+
       <div className="mt-8 flex flex-wrap gap-3">
         {session.user.role === "MERCHANT" ? (
           <Link href="/merchant/dashboard" className="btn-primary inline-flex">
             Merchant Dashboard
+          </Link>
+        ) : null}
+        {session.user.role === "ADMIN" ? (
+          <Link href="/admin/dashboard" className="btn-primary inline-flex">
+            Admin Dashboard
           </Link>
         ) : null}
         <Link

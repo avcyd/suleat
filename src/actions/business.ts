@@ -9,11 +9,13 @@
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/session";
 import {
+  addBranchForUser,
   createBusiness,
   deleteBusinessForUser,
   updateBusinessForUser,
 } from "@/services/business.service";
 import {
+  addBranchSchema,
   createBusinessSchema,
   updateBusinessSchema,
 } from "@/validators/business";
@@ -21,6 +23,7 @@ import {
 export type BusinessActionState = {
   ok: boolean;
   message: string;
+  businessId?: string;
 };
 
 function parseBranchesField(raw: FormDataEntryValue | null) {
@@ -75,9 +78,13 @@ export async function createBusinessAction(
   }
 
   try {
-    await createBusiness(session.user.id, parsed.data);
+    const business = await createBusiness(session.user.id, parsed.data);
     refreshDashboard();
-    return { ok: true, message: "Business created." };
+    return {
+      ok: true,
+      message: "Business created.",
+      businessId: business.id,
+    };
   } catch (error) {
     return {
       ok: false,
@@ -113,7 +120,7 @@ export async function updateBusinessAction(
   try {
     await updateBusinessForUser(session.user.id, businessId, parsed.data);
     refreshDashboard();
-    return { ok: true, message: "Business updated." };
+    return { ok: true, message: "Business updated.", businessId };
   } catch (error) {
     return {
       ok: false,
@@ -145,6 +152,46 @@ export async function deleteBusinessAction(
       ok: false,
       message:
         error instanceof Error ? error.message : "Could not delete business.",
+    };
+  }
+}
+
+/** Add a branch/location to an existing business. */
+export async function addBranchAction(
+  _prevState: BusinessActionState,
+  formData: FormData,
+): Promise<BusinessActionState> {
+  const session = await getSession();
+  if (!session?.user?.id) {
+    return { ok: false, message: "You must be signed in." };
+  }
+
+  const parsed = addBranchSchema.safeParse({
+    businessId: String(formData.get("businessId") ?? ""),
+    number: String(formData.get("number") ?? ""),
+    building: String(formData.get("building") ?? "") || undefined,
+    street: String(formData.get("street") ?? ""),
+    barangay: String(formData.get("barangay") ?? ""),
+    city: String(formData.get("city") ?? ""),
+    province: String(formData.get("province") ?? ""),
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: parsed.error.issues[0]?.message ?? "Invalid input.",
+    };
+  }
+
+  try {
+    const { businessId, ...branch } = parsed.data;
+    await addBranchForUser(session.user.id, businessId, branch);
+    refreshDashboard();
+    return { ok: true, message: "Branch added.", businessId };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error ? error.message : "Could not add branch.",
     };
   }
 }

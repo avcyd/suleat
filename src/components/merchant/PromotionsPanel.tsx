@@ -1,9 +1,19 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  archivePromotionAction,
+  createPromotionAction,
+  deletePromotionAction,
+  updatePromotionAction,
+} from "@/actions/promotion";
+import { SmartImage } from "@/components/ui/SmartImage";
+import { isAllowedImageSrc } from "@/lib/images";
 import type {
   BundleType,
   BusinessProfile,
+  MenuItem,
   PromotionPost,
   PromotionType,
   SortDirection,
@@ -19,20 +29,17 @@ import { SearchSortBar } from "./SearchSortBar";
 
 type PromotionsPanelProps = {
   businesses: BusinessProfile[];
+  menuItems: MenuItem[];
   promotions: PromotionPost[];
-  onCreate: (
-    promotion: Omit<PromotionPost, "id" | "createdAt" | "status">,
-  ) => void;
-  onUpdate: (promotion: PromotionPost) => void;
-  onDelete: (id: string) => void;
-  onArchive: (id: string) => void;
 };
 
 const emptyForm = {
   businessId: "",
   branchId: "",
+  menuId: "",
   caption: "",
   description: "",
+  imageUrl: "",
   promotionType: "DISCOUNT" as PromotionType,
   discountPercent: 10,
   bundleType: "FREE" as BundleType,
@@ -43,14 +50,24 @@ const emptyForm = {
   endDate: "",
 };
 
+const fieldClass =
+  "w-full rounded-lg bg-search px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ink/10";
+
+function promoImage(promo: PromotionPost) {
+  return (
+    promo.imageUrl ||
+    promo.coverPhotoFallback ||
+    "/images/landing/offer-latte.png"
+  );
+}
+
 export function PromotionsPanel({
   businesses,
+  menuItems,
   promotions,
-  onCreate,
-  onUpdate,
-  onDelete,
-  onArchive,
 }: PromotionsPanelProps) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">(
@@ -65,7 +82,22 @@ export function PromotionsPanel({
     businessId: businesses[0]?.id ?? "",
     branchId: businesses[0]?.branches[0]?.id ?? "",
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedId && !promotions.some((promo) => promo.id === selectedId)) {
+      setSelectedId(promotions[0]?.id ?? null);
+    }
+  }, [promotions, selectedId]);
+
+  function softRefresh() {
+    startTransition(() => {
+      router.refresh();
+    });
+  }
 
   const businessesWithBranches = useMemo(
     () => businesses.filter((business) => business.branches.length > 0),
@@ -87,6 +119,16 @@ export function PromotionsPanel({
     );
   }, [businesses, form.businessId]);
 
+  const menuForBusiness = useMemo(() => {
+    return menuItems.filter((item) => item.businessId === form.businessId);
+  }, [menuItems, form.businessId]);
+
+  const canCreate = useMemo(() => {
+    return businessesWithBranches.some((business) =>
+      menuItems.some((item) => item.businessId === business.id),
+    );
+  }, [businessesWithBranches, menuItems]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = promotions.filter((promo) => {
@@ -98,6 +140,7 @@ export function PromotionsPanel({
         promo.caption.toLowerCase().includes(q) ||
         promo.description.toLowerCase().includes(q) ||
         businessName(promo.businessId).toLowerCase().includes(q) ||
+        (promo.menuItemName?.toLowerCase().includes(q) ?? false) ||
         formatPromotionDeal(promo).toLowerCase().includes(q) ||
         (branch ? formatBranchLabel(branch).toLowerCase().includes(q) : false);
       return matchesStatus && matchesQuery;
@@ -107,29 +150,42 @@ export function PromotionsPanel({
       const cmp = a.createdAt.localeCompare(b.createdAt);
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [promotions, query, sortDir, statusFilter, businesses]);
+  }, [promotions, query, sortDir, statusFilter, businesses, menuItems]);
 
   const selected =
     filtered.find((promo) => promo.id === selectedId) ?? filtered[0] ?? null;
 
   function openCreate() {
-    const first = businessesWithBranches[0];
+    const first = businessesWithBranches.find((business) =>
+      menuItems.some((item) => item.businessId === business.id),
+    );
+    const firstMenu =
+      menuItems.find((item) => item.businessId === first?.id)?.id ?? "";
     setMode("create");
+    setFormError(null);
+    setFormSuccess(null);
+    setImageFile(null);
     setForm({
       ...emptyForm,
       businessId: first?.id ?? "",
       branchId: first?.branches[0]?.id ?? "",
+      menuId: firstMenu,
     });
   }
 
   function openEdit(promo: PromotionPost) {
     setSelectedId(promo.id);
     setMode("edit");
+    setFormError(null);
+    setFormSuccess(null);
+    setImageFile(null);
     setForm({
       businessId: promo.businessId,
       branchId: promo.branchId,
+      menuId: promo.menuId,
       caption: promo.caption,
       description: promo.description,
+      imageUrl: promo.imageUrl ?? "",
       promotionType: promo.promotionType,
       discountPercent: promo.discountPercent ?? 10,
       bundleType: promo.bundleType ?? "FREE",
@@ -141,97 +197,187 @@ export function PromotionsPanel({
     });
   }
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (!form.branchId) return;
-
-    const isDiscount = form.promotionType === "DISCOUNT";
-    const isFreeBundle =
-      form.promotionType === "BUNDLE" && form.bundleType === "FREE";
-    const isPercentBundle =
-      form.promotionType === "BUNDLE" && form.bundleType === "PERCENTAGE_OFF";
-
-    const payload: Omit<PromotionPost, "id" | "createdAt" | "status"> = {
-      businessId: form.businessId,
-      branchId: form.branchId,
-      caption: form.caption,
-      description: form.description,
-      promotionType: form.promotionType,
-      discountPercent: isDiscount ? form.discountPercent : undefined,
-      bundleType: form.promotionType === "BUNDLE" ? form.bundleType : undefined,
-      buyQuantity:
-        isFreeBundle || isPercentBundle ? form.buyQuantity : undefined,
-      getQuantity: isFreeBundle ? form.getQuantity : undefined,
-      bundleDiscountPercent: isPercentBundle
-        ? form.bundleDiscountPercent
-        : undefined,
-      startDate: form.startDate,
-      endDate: form.endDate,
-    };
-
-    if (mode === "create") {
-      onCreate(payload);
-      setMode("view");
-      return;
+  function validateClient(): string | null {
+    if (!form.branchId) return "Branch is required.";
+    if (!form.menuId) return "Select the menu item this deal applies to.";
+    if (form.imageUrl.trim() && !isAllowedImageSrc(form.imageUrl)) {
+      return "Image URL must be a site path or an http(s) link.";
     }
-    if (mode === "edit" && selected) {
-      onUpdate({ ...selected, ...payload });
-      setMode("view");
+    if (form.endDate && form.startDate && form.endDate < form.startDate) {
+      return "End date must be on or after the start date.";
     }
+    return null;
   }
 
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setFormError(null);
+    setFormSuccess(null);
+
+    const clientError = validateClient();
+    if (clientError) {
+      setFormError(clientError);
+      return;
+    }
+
+    const fd = new FormData();
+    fd.set("businessId", form.businessId);
+    fd.set("branchId", form.branchId);
+    fd.set("menuId", form.menuId);
+    fd.set("caption", form.caption);
+    fd.set("description", form.description);
+    if (form.imageUrl.trim()) {
+      fd.set("imageUrl", form.imageUrl.trim());
+    }
+    if (imageFile) {
+      fd.set("imageFile", imageFile);
+    }
+    fd.set("promotionType", form.promotionType);
+    if (form.promotionType === "DISCOUNT") {
+      fd.set("discountPercent", String(form.discountPercent));
+    } else {
+      fd.set("bundleType", form.bundleType);
+      fd.set("buyQuantity", String(form.buyQuantity));
+      if (form.bundleType === "FREE") {
+        fd.set("getQuantity", String(form.getQuantity));
+      } else {
+        fd.set("bundleDiscountPercent", String(form.bundleDiscountPercent));
+      }
+    }
+    fd.set("startDate", form.startDate);
+    fd.set("endDate", form.endDate);
+
+    startTransition(async () => {
+      try {
+        if (mode === "create") {
+          const result = await createPromotionAction(
+            { ok: false, message: "" },
+            fd,
+          );
+          if (!result.ok) {
+            setFormError(result.message);
+            return;
+          }
+          if (result.promotionId) {
+            setSelectedId(result.promotionId);
+          }
+          setFormSuccess(result.message);
+          setMode("view");
+          softRefresh();
+          return;
+        }
+
+        if (mode === "edit" && selected) {
+          fd.set("promotionId", selected.id);
+          // Keep existing image when no new file/URL is provided.
+          if (!imageFile && !form.imageUrl.trim() && selected.imageUrl) {
+            fd.set("imageUrl", selected.imageUrl);
+          }
+          const result = await updatePromotionAction(
+            { ok: false, message: "" },
+            fd,
+          );
+          if (!result.ok) {
+            setFormError(result.message);
+            return;
+          }
+          setFormSuccess(result.message);
+          setMode("view");
+          softRefresh();
+        }
+      } catch (error) {
+        setFormError(
+          error instanceof Error ? error.message : "Something went wrong.",
+        );
+      }
+    });
+  }
+
+  function confirmDelete() {
+    if (!deleteId) return;
+    const id = deleteId;
+    setDeleteId(null);
+    startTransition(async () => {
+      const result = await deletePromotionAction(id);
+      if (!result.ok) {
+        setFormError(result.message);
+        return;
+      }
+      setMode("view");
+      softRefresh();
+    });
+  }
+
+  function handleArchive(id: string) {
+    startTransition(async () => {
+      const result = await archivePromotionAction(id);
+      if (!result.ok) {
+        setFormError(result.message);
+        return;
+      }
+      softRefresh();
+    });
+  }
+
+  const coverFallback =
+    businesses.find((business) => business.id === form.businessId)
+      ?.coverPhoto ?? "/images/landing/offer-latte.png";
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-display text-2xl font-semibold text-ink">
-            Posts / Promotions
-          </h2>
-          <p className="mt-1 text-sm text-[#4b4b4b]">
-            Manage promotion posts — create, update, delete, and archive.
-          </p>
-        </div>
+    <div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-black/6 px-4 py-3">
+        <select
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(
+              event.target.value as "all" | "active" | "archived",
+            )
+          }
+          className="rounded-lg bg-search px-2.5 py-2 text-sm outline-none"
+        >
+          <option value="all">All status</option>
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
+        </select>
+        <SearchSortBar
+          query={query}
+          onQueryChange={setQuery}
+          sortLabel={sortDir === "desc" ? "Newest" : "Oldest"}
+          onToggleSort={() =>
+            setSortDir((value) => (value === "asc" ? "desc" : "asc"))
+          }
+          placeholder="Search promotions…"
+        />
         <button
           type="button"
           onClick={openCreate}
-          disabled={businessesWithBranches.length === 0}
-          className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          disabled={!canCreate}
+          className="shrink-0 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
-          Create Promotion
+          Add
         </button>
       </div>
 
-      <SearchSortBar
-        query={query}
-        onQueryChange={setQuery}
-        sortLabel={sortDir === "desc" ? "Newest" : "Oldest"}
-        onToggleSort={() =>
-          setSortDir((value) => (value === "asc" ? "desc" : "asc"))
-        }
-        placeholder="Search promotions..."
-      />
+      {(formError || formSuccess) && mode === "view" ? (
+        <div className="border-b border-black/6 px-4 py-2">
+          {formError ? (
+            <p className="text-xs text-brand-deep" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          {formSuccess ? (
+            <p className="text-xs text-emerald-800" role="status">
+              {formSuccess}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {(["all", "active", "archived"] as const).map((status) => (
-          <button
-            key={status}
-            type="button"
-            onClick={() => setStatusFilter(status)}
-            className={`rounded-[10px] px-4 py-2 text-sm capitalize ${
-              statusFilter === status
-                ? "border border-brand bg-[#fff0e7] text-brand"
-                : "bg-[#eaeaea] text-[#7c7c7c]"
-            }`}
-          >
-            {status}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.2fr)]">
-        <div className="space-y-3">
+      <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="max-h-[70vh] divide-y divide-black/5 overflow-y-auto border-b border-black/6 lg:border-b-0 lg:border-r">
           {filtered.map((promo) => {
             const active = selected?.id === promo.id && mode === "view";
+            const branch = branchFor(promo.businessId, promo.branchId);
             return (
               <button
                 key={promo.id}
@@ -239,166 +385,147 @@ export function PromotionsPanel({
                 onClick={() => {
                   setSelectedId(promo.id);
                   setMode("view");
+                  setFormError(null);
+                  setFormSuccess(null);
                 }}
-                className={`w-full rounded-[14px] border p-4 text-left transition-colors ${
-                  active
-                    ? "border-brand/40 bg-offer-hover"
-                    : "border-transparent bg-offer-static hover:bg-offer-hover"
+                className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors ${
+                  active ? "bg-merchant" : "hover:bg-black/[0.02]"
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-ink">
-                      {promo.caption}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">
-                      {businessName(promo.businessId)} ·{" "}
-                      {formatPromotionDeal(promo)}
-                      {(() => {
-                        const branch = branchFor(
-                          promo.businessId,
-                          promo.branchId,
-                        );
-                        return branch
-                          ? ` · ${branch.city}`
-                          : " · Unknown branch";
-                      })()}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium capitalize ${
-                      promo.status === "active"
-                        ? "bg-[#e8f8ef] text-green-700"
-                        : "bg-[#f0f0f0] text-[#666]"
-                    }`}
-                  >
-                    {promo.status}
-                  </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {promo.caption}
+                  </p>
+                  <p className="truncate text-xs text-muted">
+                    {formatPromotionDeal(promo)}
+                    {promo.menuItemName ? ` · ${promo.menuItemName}` : ""}
+                    {branch ? ` · ${branch.city}` : ""}
+                  </p>
                 </div>
-                <p className="mt-2 line-clamp-2 text-xs text-[#4b4b4b]">
-                  {promo.description}
-                </p>
+                <span
+                  className={`shrink-0 text-[10px] font-medium capitalize ${
+                    promo.status === "active" ? "text-green-700" : "text-muted"
+                  }`}
+                >
+                  {promo.status}
+                </span>
               </button>
             );
           })}
           {filtered.length === 0 ? (
-            <p className="rounded-[14px] bg-offer-static px-4 py-8 text-center text-sm text-[#4b4b4b]">
-              No promotions match your filters.
+            <p className="px-4 py-10 text-center text-sm text-muted">
+              {canCreate
+                ? "No promotions yet."
+                : "Add a business with branches and menu items first."}
             </p>
           ) : null}
         </div>
 
-        <div className="rounded-[18px] border border-black/5 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:p-6">
+        <div className="p-4 sm:p-5">
           {mode === "view" && selected ? (
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[#fff0e7] px-3 py-1 text-xs font-medium text-brand">
-                  {formatPromotionDeal(selected)}
-                </span>
-                {selected.promotionType === "BUNDLE" ? (
-                  <span className="rounded-full bg-search px-3 py-1 text-xs text-[#555]">
-                    {selected.bundleType === "PERCENTAGE_OFF"
-                      ? "Bundle · % off"
-                      : "Bundle · Free"}
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-search px-3 py-1 text-xs text-[#555]">
-                    Discount
-                  </span>
-                )}
-                <span className="rounded-full bg-search px-3 py-1 text-xs capitalize text-[#555]">
-                  {selected.status}
-                </span>
-              </div>
-              <h3 className="mt-4 font-display text-2xl font-semibold text-ink">
-                {selected.caption}
-              </h3>
-              <p className="mt-2 text-sm text-brand">
-                {businessName(selected.businessId)}
-              </p>
-              <p className="mt-3 text-sm leading-6 text-[#4b4b4b]">
-                {selected.description}
-              </p>
-              <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Effective branch
-                  </dt>
-                  <dd className="mt-1 font-medium">
-                    {(() => {
-                      const branch = branchFor(
-                        selected.businessId,
-                        selected.branchId,
-                      );
-                      return branch
-                        ? formatBranchAddress(branch)
-                        : "Branch not found";
-                    })()}
-                  </dd>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-brand">
+                    {formatPromotionDeal(selected)}
+                  </p>
+                  <h2 className="mt-0.5 font-display text-xl font-semibold text-ink">
+                    {selected.caption}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted">
+                    {businessName(selected.businessId)}
+                    {selected.menuItemName
+                      ? ` · ${selected.menuItemName}`
+                      : ""}{" "}
+                    · {selected.startDate} → {selected.endDate}
+                  </p>
                 </div>
-                <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Start
-                  </dt>
-                  <dd className="mt-1 font-medium">{selected.startDate}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    End
-                  </dt>
-                  <dd className="mt-1 font-medium">{selected.endDate}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Effective discount
-                  </dt>
-                  <dd className="mt-1 font-medium">
-                    {getEffectiveDiscountPercent(selected)}%
-                  </dd>
-                </div>
-              </dl>
-              <div className="mt-6 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openEdit(selected)}
-                  className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white"
-                >
-                  Update
-                </button>
-                {selected.status === "active" ? (
+                <div className="flex shrink-0 gap-1">
                   <button
                     type="button"
-                    onClick={() => onArchive(selected.id)}
-                    className="rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium text-ink"
+                    onClick={() => openEdit(selected)}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-black/[0.04]"
                   >
-                    Archive
+                    Edit
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setDeleteId(selected.id)}
-                  className="rounded-full border border-brand px-5 py-2.5 text-sm font-medium text-brand"
-                >
-                  Delete
-                </button>
+                  {selected.status === "active" ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => handleArchive(selected.id)}
+                      className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-black/[0.04] disabled:opacity-60"
+                    >
+                      Archive
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setDeleteId(selected.id)}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/5"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
+
+              <div className="relative mt-4 aspect-[2.4/1] overflow-hidden rounded-lg">
+                <SmartImage
+                  src={promoImage(selected)}
+                  alt=""
+                  fill
+                  className="object-cover"
+                  sizes="500px"
+                />
+              </div>
+
+              <p className="mt-4 text-sm leading-relaxed text-[#4b4b4b]">
+                {selected.description}
+              </p>
+              <p className="mt-3 text-xs text-muted">
+                {(() => {
+                  const branch = branchFor(
+                    selected.businessId,
+                    selected.branchId,
+                  );
+                  return branch
+                    ? formatBranchAddress(branch)
+                    : "Branch not found";
+                })()}
+                {" · "}~{getEffectiveDiscountPercent(selected)}%
+              </p>
             </div>
           ) : null}
 
           {mode === "view" && !selected ? (
-            <p className="py-10 text-center text-sm text-[#4b4b4b]">
-              Select a promotion or create a new post.
+            <p className="py-12 text-center text-sm text-muted">
+              Select a promotion or add a new one.
             </p>
           ) : null}
 
           {(mode === "create" || mode === "edit") && (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <h3 className="font-display text-2xl font-semibold text-ink">
-                {mode === "create" ? "Create Promotion" : "Update Promotion"}
-              </h3>
+            <form onSubmit={handleSubmit} className="space-y-3" noValidate>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-ink">
+                  {mode === "create" ? "New promotion" : "Edit promotion"}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("view");
+                    setFormError(null);
+                    setFormSuccess(null);
+                    setImageFile(null);
+                  }}
+                  className="text-xs font-medium text-muted hover:text-ink"
+                >
+                  Cancel
+                </button>
+              </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Business</label>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Business
+                </label>
                 <select
                   required
                   value={form.businessId}
@@ -407,13 +534,17 @@ export function PromotionsPanel({
                     const firstBranch =
                       businesses.find((business) => business.id === businessId)
                         ?.branches[0]?.id ?? "";
+                    const firstMenu =
+                      menuItems.find((item) => item.businessId === businessId)
+                        ?.id ?? "";
                     setForm((prev) => ({
                       ...prev,
                       businessId,
                       branchId: firstBranch,
+                      menuId: firstMenu,
                     }));
                   }}
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                  className={fieldClass}
                 >
                   {businessesWithBranches.map((business) => (
                     <option key={business.id} value={business.id}>
@@ -424,7 +555,7 @@ export function PromotionsPanel({
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">
+                <label className="mb-1 block text-xs font-medium text-muted">
                   Branch
                 </label>
                 <select
@@ -436,11 +567,11 @@ export function PromotionsPanel({
                       branchId: event.target.value,
                     }))
                   }
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                  className={fieldClass}
                 >
                   {selectedBusinessBranches.length === 0 ? (
                     <option value="" disabled>
-                      No branches for this business
+                      No branches
                     </option>
                   ) : (
                     selectedBusinessBranches.map((branch) => (
@@ -450,30 +581,58 @@ export function PromotionsPanel({
                     ))
                   )}
                 </select>
-                <p className="mt-1.5 text-xs text-muted">
-                  Required — choose which branch this promotion applies to.
-                </p>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Caption</label>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Menu item
+                </label>
+                <select
+                  required
+                  value={form.menuId}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      menuId: event.target.value,
+                    }))
+                  }
+                  className={fieldClass}
+                >
+                  {menuForBusiness.length === 0 ? (
+                    <option value="" disabled>
+                      No menu items for this business
+                    </option>
+                  ) : (
+                    menuForBusiness.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.itemName}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Caption
+                </label>
                 <input
                   required
                   value={form.caption}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, caption: event.target.value }))
                   }
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                  className={fieldClass}
                 />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">
+                <label className="mb-1 block text-xs font-medium text-muted">
                   Description
                 </label>
                 <textarea
                   required
-                  rows={3}
+                  rows={2}
                   value={form.description}
                   onChange={(event) =>
                     setForm((prev) => ({
@@ -481,12 +640,55 @@ export function PromotionsPanel({
                       description: event.target.value,
                     }))
                   }
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                  className={fieldClass}
                 />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Type</label>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Promo image
+                </label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(event) =>
+                    setImageFile(event.target.files?.[0] ?? null)
+                  }
+                  className="w-full text-sm"
+                />
+                <input
+                  type="text"
+                  inputMode="url"
+                  placeholder="Or paste image URL (optional)"
+                  value={form.imageUrl}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      imageUrl: event.target.value,
+                    }))
+                  }
+                  className={`mt-2 ${fieldClass}`}
+                />
+                <p className="mt-1 text-[11px] text-muted">
+                  Optional. If empty, the business cover image is used.
+                </p>
+                {!imageFile && !form.imageUrl.trim() ? (
+                  <div className="relative mt-2 aspect-[2.4/1] overflow-hidden rounded-lg opacity-80">
+                    <SmartImage
+                      src={coverFallback}
+                      alt="Cover fallback preview"
+                      fill
+                      className="object-cover"
+                      sizes="400px"
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Type
+                </label>
                 <select
                   value={form.promotionType}
                   onChange={(event) =>
@@ -495,7 +697,7 @@ export function PromotionsPanel({
                       promotionType: event.target.value as PromotionType,
                     }))
                   }
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                  className={fieldClass}
                 >
                   <option value="DISCOUNT">Discount</option>
                   <option value="BUNDLE">Bundle</option>
@@ -504,7 +706,7 @@ export function PromotionsPanel({
 
               {form.promotionType === "DISCOUNT" ? (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium">
+                  <label className="mb-1 block text-xs font-medium text-muted">
                     Discount %
                   </label>
                   <input
@@ -519,13 +721,13 @@ export function PromotionsPanel({
                         discountPercent: Number(event.target.value),
                       }))
                     }
-                    className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                    className={fieldClass}
                   />
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium">
+                    <label className="mb-1 block text-xs font-medium text-muted">
                       Bundle type
                     </label>
                     <select
@@ -536,21 +738,20 @@ export function PromotionsPanel({
                           bundleType: event.target.value as BundleType,
                         }))
                       }
-                      className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                      className={fieldClass}
                     >
-                      <option value="FREE">Free (Buy X Get Y free)</option>
+                      <option value="FREE">Free (Buy X Get Y)</option>
                       <option value="PERCENTAGE_OFF">
-                        Percentage off (Buy X Get Y% off)
+                        % off (Buy X Get Y% off)
                       </option>
                     </select>
                   </div>
-
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium">
+                    <label className="mb-1 block text-xs font-medium text-muted">
                       Deal
                     </label>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-ink">Buy</span>
+                      <span className="text-xs font-medium">Buy</span>
                       <input
                         type="number"
                         min={1}
@@ -562,10 +763,9 @@ export function PromotionsPanel({
                             buyQuantity: Number(event.target.value),
                           }))
                         }
-                        className="w-20 rounded-[10px] bg-search px-3 py-3 text-center text-sm outline-none"
-                        aria-label="Buy quantity"
+                        className="w-16 rounded-lg bg-search px-2 py-2 text-center text-sm outline-none"
                       />
-                      <span className="text-sm font-medium text-ink">Get</span>
+                      <span className="text-xs font-medium">Get</span>
                       {form.bundleType === "FREE" ? (
                         <input
                           type="number"
@@ -578,11 +778,10 @@ export function PromotionsPanel({
                               getQuantity: Number(event.target.value),
                             }))
                           }
-                          className="w-20 rounded-[10px] bg-search px-3 py-3 text-center text-sm outline-none"
-                          aria-label="Get quantity free"
+                          className="w-16 rounded-lg bg-search px-2 py-2 text-center text-sm outline-none"
                         />
                       ) : (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           <input
                             type="number"
                             min={1}
@@ -592,44 +791,25 @@ export function PromotionsPanel({
                             onChange={(event) =>
                               setForm((prev) => ({
                                 ...prev,
-                                bundleDiscountPercent: Number(event.target.value),
+                                bundleDiscountPercent: Number(
+                                  event.target.value,
+                                ),
                               }))
                             }
-                            className="w-20 rounded-[10px] bg-search px-3 py-3 text-center text-sm outline-none"
-                            aria-label="Get percent off"
+                            className="w-16 rounded-lg bg-search px-2 py-2 text-center text-sm outline-none"
                           />
-                          <span className="text-sm font-medium text-ink">
-                            % off
-                          </span>
+                          <span className="text-xs font-medium">% off</span>
                         </div>
                       )}
                     </div>
-                    <p className="mt-2 text-xs text-muted">
-                      Preview:{" "}
-                      <span className="font-medium text-brand">
-                        {form.bundleType === "PERCENTAGE_OFF"
-                          ? `Buy ${form.buyQuantity} Get ${form.bundleDiscountPercent}% off`
-                          : `Buy ${form.buyQuantity} Get ${form.getQuantity}`}
-                      </span>
-                      {" · "}
-                      Effective discount ~{" "}
-                      {getEffectiveDiscountPercent({
-                        promotionType: "BUNDLE",
-                        bundleType: form.bundleType,
-                        buyQuantity: form.buyQuantity,
-                        getQuantity: form.getQuantity,
-                        bundleDiscountPercent: form.bundleDiscountPercent,
-                      })}
-                      % (used later for highest-discount sort)
-                    </p>
                   </div>
                 </div>
               )}
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    Start date
+                  <label className="mb-1 block text-xs font-medium text-muted">
+                    Start
                   </label>
                   <input
                     type="date"
@@ -641,12 +821,12 @@ export function PromotionsPanel({
                         startDate: event.target.value,
                       }))
                     }
-                    className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                    className={fieldClass}
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    End date
+                  <label className="mb-1 block text-xs font-medium text-muted">
+                    End
                   </label>
                   <input
                     type="date"
@@ -658,26 +838,31 @@ export function PromotionsPanel({
                         endDate: event.target.value,
                       }))
                     }
-                    className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                    className={fieldClass}
                   />
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-2">
-                <button
-                  type="submit"
-                  className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white"
+              {formError ? (
+                <p
+                  className="rounded-lg bg-[#fff0e7] px-3 py-2 text-xs text-brand-deep"
+                  role="alert"
                 >
-                  {mode === "create" ? "Create" : "Save changes"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode("view")}
-                  className="rounded-full px-5 py-2.5 text-sm font-medium text-ink hover:bg-black/5"
-                >
-                  Cancel
-                </button>
-              </div>
+                  {formError}
+                </p>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={pending || menuForBusiness.length === 0}
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {pending
+                  ? "Saving…"
+                  : mode === "create"
+                    ? "Create"
+                    : "Save"}
+              </button>
             </form>
           )}
         </div>
@@ -689,11 +874,7 @@ export function PromotionsPanel({
         message="This permanently removes the post from your promotions list."
         confirmLabel="Delete"
         onCancel={() => setDeleteId(null)}
-        onConfirm={() => {
-          if (deleteId) onDelete(deleteId);
-          setDeleteId(null);
-          setMode("view");
-        }}
+        onConfirm={confirmDelete}
       />
     </div>
   );

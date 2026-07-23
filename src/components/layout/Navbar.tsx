@@ -29,9 +29,12 @@ export function Navbar() {
 
   const isAuthenticated = status === "authenticated" && !!session?.user;
   const isMerchant = session?.user?.role === "MERCHANT";
-  // Offers / merchant dashboard have their own search UX — hide navbar search.
+  const isAdmin = session?.user?.role === "ADMIN";
+  // Offers / dashboards have their own search UX — hide navbar search.
   const showNavbarSearch =
-    pathname !== "/offers" && !pathname.startsWith("/merchant");
+    pathname !== "/offers" &&
+    !pathname.startsWith("/merchant") &&
+    !pathname.startsWith("/admin");
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -169,6 +172,16 @@ export function Navbar() {
                         onClick={() => setAccountOpen(false)}
                       >
                         Dashboard
+                      </Link>
+                    ) : null}
+                    {isAdmin ? (
+                      <Link
+                        href="/admin/dashboard"
+                        role="menuitem"
+                        className="block px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-[#f5f5f5]"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        Admin Dashboard
                       </Link>
                     ) : null}
                     <button

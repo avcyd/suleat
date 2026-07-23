@@ -6,6 +6,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import type {
+  BranchInput,
   CreateBusinessInput,
   UpdateBusinessInput,
 } from "@/validators/business";
@@ -122,4 +123,33 @@ export async function deleteBusinessForUser(
   await prisma.promotion.deleteMany({ where: { businessId } });
   await prisma.branch.deleteMany({ where: { businessId } });
   await prisma.business.delete({ where: { id: businessId } });
+}
+
+/** Add a branch to an existing business owned by this merchant. */
+export async function addBranchForUser(
+  userId: string,
+  businessId: string,
+  input: BranchInput,
+) {
+  const merchant = await requireMerchantForUser(userId);
+
+  const existing = await prisma.business.findFirst({
+    where: { id: businessId, merchantId: merchant.id },
+    select: { id: true },
+  });
+  if (!existing) {
+    throw new Error("Business not found.");
+  }
+
+  return prisma.branch.create({
+    data: {
+      businessId,
+      number: input.number,
+      building: input.building?.trim() ? input.building : undefined,
+      street: input.street,
+      barangay: input.barangay,
+      city: input.city,
+      province: input.province,
+    },
+  });
 }

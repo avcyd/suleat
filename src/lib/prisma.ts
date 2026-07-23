@@ -6,12 +6,20 @@
  *
  * Prisma v7 requires a driver adapter (here: PostgreSQL via `@prisma/adapter-pg`).
  * The generated client lives in `/generated/prisma` (see prisma/schema.prisma).
+ *
+ * Bump PRISMA_SINGLETON_REV after `prisma generate` when the schema gains
+ * fields/relations, so a stale globalThis client is replaced without a full
+ * process restart.
  */
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../generated/prisma/client";
 
+/** Bump when generated client shape changes (e.g. new Promotion.branch). */
+const PRISMA_SINGLETON_REV = 6;
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  prismaRev: number | undefined;
 };
 
 function createPrismaClient() {
@@ -27,9 +35,22 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+function getPrismaClient() {
+  if (
+    globalForPrisma.prisma &&
+    globalForPrisma.prismaRev === PRISMA_SINGLETON_REV
+  ) {
+    return globalForPrisma.prisma;
+  }
 
-// Keep the client across hot reloads in development only.
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  if (globalForPrisma.prisma) {
+    void globalForPrisma.prisma.$disconnect();
+  }
+
+  const client = createPrismaClient();
+  globalForPrisma.prisma = client;
+  globalForPrisma.prismaRev = PRISMA_SINGLETON_REV;
+  return client;
 }
+
+export const prisma = getPrismaClient();

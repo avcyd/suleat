@@ -9,6 +9,20 @@ export async function createMerchant(
   userId: string,
   input: CreateMerchantInput,
 ) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  if (!user) {
+    throw new Error("User not found.");
+  }
+  if (user.role === "ADMIN") {
+    throw new Error("Admin accounts cannot apply to become a merchant.");
+  }
+  if (user.role === "MERCHANT") {
+    throw new Error("You already have merchant access.");
+  }
+
   const existing = await prisma.merchant.findUnique({ where: { userId } });
   if (existing) {
     throw new Error("This user already has a merchant profile.");
@@ -31,11 +45,7 @@ export async function createMerchant(
     },
   });
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { role: "MERCHANT" },
-  });
-
+  // Role stays USER until an admin approves the application.
   return merchant;
 }
 

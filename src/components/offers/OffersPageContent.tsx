@@ -3,27 +3,58 @@
 /**
  * Offers page — hero, page-level search, filters, sort, cards, pagination.
  * Navbar search is hidden on this route (see Navbar).
+ * Offer data is loaded from the database by the server page.
+ * `?category=` (from homepage tiles) sets the initial filter.
  */
 import Image from "next/image";
-import { useMemo, useState } from "react";
-import { OfferCard } from "@/components/landing/OfferCard";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { OfferCardsWithDetails } from "@/components/offers/OfferCardsWithDetails";
 import { HeroCarousel } from "@/components/landing/HeroCarousel";
 import { heroSlides } from "@/data";
-import { latestOffers, offerFilters, type OfferFilter } from "@/data/offers";
+import { offerFilters, type OfferFilter } from "@/data/offers";
+import type { Offer } from "@/types/landing";
 
 type SortMode = "newest" | "expiring";
 
-export function OffersPageContent() {
+type OffersPageContentProps = {
+  offers: Offer[];
+  initialCategory?: OfferFilter;
+};
+
+export function OffersPageContent({
+  offers,
+  initialCategory = "All",
+}: OffersPageContentProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [query, setQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<OfferFilter>("All");
+  const [activeFilter, setActiveFilter] =
+    useState<OfferFilter>(initialCategory);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [page, setPage] = useState(1);
   const pageSize = 5;
 
+  useEffect(() => {
+    setActiveFilter(initialCategory);
+    setPage(1);
+  }, [initialCategory]);
+
+  function selectFilter(filter: OfferFilter) {
+    setActiveFilter(filter);
+    setPage(1);
+    const params = new URLSearchParams();
+    if (filter !== "All") {
+      params.set("category", filter);
+    }
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
 
-    let list = latestOffers.filter((offer) => {
+    let list = offers.filter((offer) => {
       const matchesFilter =
         activeFilter === "All" || offer.category === activeFilter;
       const matchesQuery =
@@ -42,7 +73,7 @@ export function OffersPageContent() {
     });
 
     return list;
-  }, [query, activeFilter, sortMode]);
+  }, [offers, query, activeFilter, sortMode]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -55,7 +86,6 @@ export function OffersPageContent() {
     <main className="mx-auto flex w-full max-w-[914px] flex-col gap-6 px-4 pb-10 pt-5 sm:px-6 sm:pt-6">
       <HeroCarousel slides={heroSlides} />
 
-      {/* Page search — Figma places search here, not in the navbar */}
       <form
         role="search"
         onSubmit={(event) => event.preventDefault()}
@@ -82,10 +112,7 @@ export function OffersPageContent() {
               <button
                 key={filter}
                 type="button"
-                onClick={() => {
-                  setActiveFilter(filter);
-                  setPage(1);
-                }}
+                onClick={() => selectFilter(filter)}
                 className={`shrink-0 rounded-[10px] px-4 py-2 text-sm transition-colors ${
                   isActive
                     ? "border border-brand bg-[#fff0e7] text-brand"
@@ -117,15 +144,11 @@ export function OffersPageContent() {
         </button>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {pageItems.length > 0 ? (
-          pageItems.map((offer) => <OfferCard key={offer.id} offer={offer} />)
-        ) : (
-          <p className="rounded-[10px] bg-offer-static px-5 py-8 text-center text-sm text-[#363636]">
-            No offers match your search.
-          </p>
-        )}
-      </div>
+      <OfferCardsWithDetails
+        offers={pageItems}
+        emptyMessage="No offers match your search."
+        renderWrapper={(offer, card) => <div id={offer.id}>{card}</div>}
+      />
 
       <nav
         className="flex items-center justify-center gap-4 pt-2 text-sm font-medium text-[#333]"

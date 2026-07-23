@@ -1,8 +1,9 @@
 /**
  * Auth proxy (Next.js 16+)
  * ------------------------
- * - /account/* → requires any signed-in user
- * - /merchant/* → requires signed-in MERCHANT role
+ * - /account/*, /merchant/*, /admin/* → require signed-in user
+ * Role checks happen in the page (getSession runs the jwt callback and
+ * can read the fresh role from the DB).
  */
 import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
@@ -15,7 +16,6 @@ export async function proxy(request: NextRequest) {
   });
 
   const pathname = request.nextUrl.pathname;
-  const isMerchantRoute = pathname.startsWith("/merchant");
 
   if (!token) {
     const loginUrl = new URL("/login", request.url);
@@ -23,14 +23,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Business dashboard is merchant-only; send others to apply flow.
-  if (isMerchantRoute && token.role !== "MERCHANT") {
-    return NextResponse.redirect(new URL("/merchants", request.url));
-  }
-
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/account/:path*", "/merchant/:path*"],
+  matcher: ["/account/:path*", "/merchant/:path*", "/admin/:path*"],
 };

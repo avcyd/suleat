@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Offer } from "@/types/landing";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
-import { OfferCard } from "./OfferCard";
+import { OfferCardsWithDetails } from "@/components/offers/OfferCardsWithDetails";
 
 type LatestOffersProps = {
   offers: Offer[];
@@ -31,16 +31,21 @@ export function LatestOffers({ offers }: LatestOffersProps) {
         </Link>
       </div>
 
-      <div className="mt-4 flex flex-col gap-1">
-        {offers.map((offer, index) => (
-          <div
-            key={offer.id}
-            className="reveal-item"
-            style={{ transitionDelay: `${index * 100}ms` }}
-          >
-            <OfferCard offer={offer} />
-          </div>
-        ))}
+      <div className="mt-4">
+        <OfferCardsWithDetails
+          offers={offers}
+          emptyMessage="No offers available right now."
+          renderWrapper={(offer, card) => (
+            <div
+              className="reveal-item"
+              style={{
+                transitionDelay: `${offers.findIndex((item) => item.id === offer.id) * 100}ms`,
+              }}
+            >
+              {card}
+            </div>
+          )}
+        />
       </div>
     </section>
   );

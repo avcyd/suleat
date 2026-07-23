@@ -18,6 +18,10 @@ enum UserRole {
   MERCHANT
 }
 
+enum NotificationType {
+  MERCHANT_REJECTED
+}
+
 enum PromotionType {
   DISCOUNT
   BUNDLE
@@ -40,12 +44,26 @@ enum Category {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  displayName  String
-  email        String    @unique
-  passwordHash String
-  role         UserRole
-  merchant     Merchant?
+  id            String         @id @default(cuid())
+  displayName   String
+  email         String         @unique
+  passwordHash  String
+  role          UserRole
+  merchant      Merchant?
+  notifications Notification[]
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
 }
 
 model Merchant {
@@ -86,14 +104,15 @@ model Branch {
 }
 
 model Menu {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   businessId  String
-  business    Business @relation(fields: [businessId], references: [id])
+  business    Business    @relation(fields: [businessId], references: [id])
   itemName    String
   description String?
-  price       Decimal  @db.Decimal(10, 2)
+  price       Decimal     @db.Decimal(10, 2)
   category    Category
   isAvailable Boolean
+  promotion   Promotion[]
 }
 
 model Promotion {
@@ -103,9 +122,14 @@ model Promotion {
   /// Branch where this promotion is effective (one business can have many branches)
   branchId   String
   branch     Branch   @relation(fields: [branchId], references: [id])
+  /// Menu item this deal applies to
+  menuId     String
+  menu       Menu     @relation(fields: [menuId], references: [id])
 
   caption               String
   description           String
+  /// Optional promo image; falls back to business coverPhoto when null/empty
+  imageUrl              String?
   promotionType         PromotionType
   discountPercent       Int? // used only if promotionType==DISCOUNT
   bundleType            BundleType? // used only if promotionType==BUNDLE
@@ -114,6 +138,7 @@ model Promotion {
   bundleDiscountPercent Int? // used only if bundleType==PERCENTAGE_OFF
   startDate             DateTime
   endDate               DateTime
+  archived              Boolean       @default(false)
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 }

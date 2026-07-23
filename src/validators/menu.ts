@@ -22,12 +22,12 @@ const menuItemFieldsSchema = z.object({
     .trim()
     .max(1000, { message: "Description must not exceed 1000 characters." }),
   price: z.coerce
-    .number({ invalid_type_error: "Price must be a number." })
+    .number({ message: "Price must be a number." })
     .finite({ message: "Price must be a valid number." })
     .positive({ message: "Price must be greater than 0." })
     .max(99999999.99, { message: "Price is too large." }),
   category: z.enum(menuCategories, {
-    errorMap: () => ({ message: "Select a valid category." }),
+    message: "Select a valid category.",
   }),
   isAvailable: z.boolean(),
 });

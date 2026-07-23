@@ -17,6 +17,9 @@ const initialState: MerchantActionState = {
   message: "",
 };
 
+const fieldClass =
+  "w-full rounded-lg bg-search px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ink/10";
+
 export function AccountPanel({ account }: AccountPanelProps) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(
@@ -34,56 +37,49 @@ export function AccountPanel({ account }: AccountPanelProps) {
   }, [state.ok, state.message, router]);
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="font-display text-2xl font-semibold text-ink">
-          Account Management
-        </h2>
-        <p className="mt-1 text-sm text-[#4b4b4b]">
-          Update your merchant company details. Display name and email come from
-          your user account.
-        </p>
-      </div>
+    <div className="max-w-lg p-4 sm:p-5">
+      <h2 className="text-sm font-semibold text-ink">Account</h2>
+      <p className="mt-1 text-xs text-muted">
+        Company details for your merchant profile. Name and email come from your
+        user account.
+      </p>
 
-      <form
-        action={formAction}
-        className="max-w-xl space-y-4 rounded-[18px] border border-black/5 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:p-6"
-      >
+      <form action={formAction} className="mt-5 space-y-3">
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">
+          <label className="mb-1 block text-xs font-medium text-muted">
             Display name
           </label>
           <input
             disabled
             value={account.displayName}
-            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm text-muted outline-none"
+            className={`${fieldClass} text-muted`}
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">
+          <label className="mb-1 block text-xs font-medium text-muted">
             Email
           </label>
           <input
             disabled
             type="email"
             value={account.email}
-            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm text-muted outline-none"
+            className={`${fieldClass} text-muted`}
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">
+          <label className="mb-1 block text-xs font-medium text-muted">
             Company name
           </label>
           <input
             required
             name="companyName"
             defaultValue={account.companyName}
-            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
+            className={fieldClass}
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">
-            Phone number
+          <label className="mb-1 block text-xs font-medium text-muted">
+            Phone
           </label>
           <input
             required
@@ -91,11 +87,11 @@ export function AccountPanel({ account }: AccountPanelProps) {
             defaultValue={account.phoneNumber}
             inputMode="numeric"
             maxLength={12}
-            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
+            className={fieldClass}
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">
+          <label className="mb-1 block text-xs font-medium text-muted">
             Tax ID
           </label>
           <input
@@ -105,26 +101,33 @@ export function AccountPanel({ account }: AccountPanelProps) {
             inputMode="numeric"
             maxLength={12}
             minLength={12}
-            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
+            className={fieldClass}
           />
         </div>
 
-        {state.message && !state.ok ? (
-          <p className="text-sm text-brand">{state.message}</p>
+        {state.message ? (
+          <p
+            className={`rounded-lg px-3 py-2 text-xs ${
+              state.ok
+                ? "bg-emerald-50 text-emerald-800"
+                : "bg-[#fff0e7] text-brand-deep"
+            }`}
+            role={state.ok ? "status" : "alert"}
+          >
+            {state.message}
+          </p>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-3 pt-2">
+        <div className="flex items-center gap-3 pt-1">
           <button
             type="submit"
             disabled={pending}
-            className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+            className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
-            {pending ? "Saving…" : "Update Account"}
+            {pending ? "Saving…" : "Save"}
           </button>
           {savedFlash ? (
-            <span className="text-sm font-medium text-green-700">
-              Changes saved
-            </span>
+            <span className="text-xs font-medium text-green-700">Saved</span>
           ) : null}
         </div>
       </form>

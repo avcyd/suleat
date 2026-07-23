@@ -182,6 +182,7 @@ export const mockPromotions: PromotionPost[] = [
     id: "promo-1",
     businessId: "biz-1",
     branchId: "br-1a",
+    menuId: "menu-1",
     caption: "Get 20% off for Cafe Latte",
     description:
       "Limited-time latte discount for walk-in customers. Perfect for afternoon pick-me-ups.",
@@ -196,6 +197,7 @@ export const mockPromotions: PromotionPost[] = [
     id: "promo-2",
     businessId: "biz-2",
     branchId: "br-2a",
+    menuId: "menu-2",
     caption: "Buy 2 Get 1 Free Pizza Slices",
     description:
       "Share a trio of classic slices with friends. Available daily from lunch until close.",
@@ -212,6 +214,7 @@ export const mockPromotions: PromotionPost[] = [
     id: "promo-3",
     businessId: "biz-3",
     branchId: "br-3a",
+    menuId: "menu-3",
     caption: "Buy 1 Get 1 on Classic Donuts",
     description:
       "Sweet cravings deserve better deals. BOGO on glazed and filled donuts.",
@@ -228,6 +231,7 @@ export const mockPromotions: PromotionPost[] = [
     id: "promo-4",
     businessId: "biz-1",
     branchId: "br-1b",
+    menuId: "menu-1",
     caption: "15% off Ube Frappes",
     description:
       "Cool down with creamy ube frappes made for sunny afternoons.",
@@ -242,6 +246,7 @@ export const mockPromotions: PromotionPost[] = [
     id: "promo-5",
     businessId: "biz-2",
     branchId: "br-2b",
+    menuId: "menu-2",
     caption: "Buy 3 Get 25% off Pasta Combos",
     description:
       "Order any 3 pasta plates and unlock a 25% off bundle discount.",

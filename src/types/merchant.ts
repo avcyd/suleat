@@ -66,8 +66,14 @@ export type PromotionPost = {
   businessId: string;
   /** Branch where the promotion is effective */
   branchId: string;
+  /** Menu item this deal applies to */
+  menuId: string;
+  menuItemName?: string;
   caption: string;
   description: string;
+  /** Promo image; falls back to business cover when empty */
+  imageUrl?: string;
+  coverPhotoFallback?: string;
   promotionType: PromotionType;
   /** Used when promotionType === DISCOUNT */
   discountPercent?: number;

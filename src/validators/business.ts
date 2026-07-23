@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { isAllowedImageSrc } from "@/lib/images";
 
 const branchSchema = z.object({
   number: z
     .string()
     .trim()
-    .min(1, { message: "Unit / number is required." })
-    .max(50, { message: "Unit / number must not exceed 50 characters." }),
+    .min(1, { message: "Unit or number is required." })
+    .max(50, { message: "Unit or number must not exceed 50 characters." }),
   building: z
     .string()
     .trim()
@@ -33,6 +34,14 @@ const branchSchema = z.object({
     .max(100, { message: "Province must not exceed 100 characters." }),
 });
 
+function todayYmd() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 const businessFieldsSchema = z.object({
   businessName: z
     .string()
@@ -49,12 +58,18 @@ const businessFieldsSchema = z.object({
     .trim()
     .regex(/^\d{4}-\d{2}-\d{2}$/, {
       message: "Date established must be a valid date (YYYY-MM-DD).",
+    })
+    .refine((value) => value <= todayYmd(), {
+      message: "Establishment date cannot be in the future.",
     }),
   coverPhoto: z
     .string()
     .trim()
     .min(1, { message: "Cover photo is required." })
-    .max(500, { message: "Cover photo path must not exceed 500 characters." }),
+    .max(2000, { message: "Cover photo URL is too long." })
+    .refine(isAllowedImageSrc, {
+      message: "Cover photo must be a site path or an http(s) image URL.",
+    }),
 });
 
 /** Create business + at least one branch (matches Prisma Business + Branch). */
@@ -70,3 +85,11 @@ export const updateBusinessSchema = businessFieldsSchema;
 export type BranchInput = z.infer<typeof branchSchema>;
 export type CreateBusinessInput = z.infer<typeof createBusinessSchema>;
 export type UpdateBusinessInput = z.infer<typeof updateBusinessSchema>;
+
+export { branchSchema };
+
+export const addBranchSchema = branchSchema.extend({
+  businessId: z.string().trim().min(1, { message: "Business is required." }),
+});
+
+export type AddBranchInput = z.infer<typeof addBranchSchema>;

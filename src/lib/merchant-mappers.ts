@@ -3,9 +3,12 @@
  */
 import type {
   BusinessProfile,
+  BundleType,
   MenuCategory,
   MenuItem,
   MerchantAccount,
+  PromotionPost,
+  PromotionType,
 } from "@/types/merchant";
 
 type MerchantWithUser = {
@@ -86,5 +89,51 @@ export function toMenuItem(item: MenuRow): MenuItem {
     price: Number(item.price),
     category: item.category,
     isAvailable: item.isAvailable,
+  };
+}
+
+type PromotionRow = {
+  id: string;
+  businessId: string;
+  branchId: string;
+  menuId: string;
+  caption: string;
+  description: string;
+  imageUrl: string | null;
+  promotionType: PromotionType;
+  discountPercent: number | null;
+  bundleType: BundleType | null;
+  buyQuantity: number | null;
+  getQuantity: number | null;
+  bundleDiscountPercent: number | null;
+  startDate: Date;
+  endDate: Date;
+  archived: boolean;
+  createdAt: Date;
+  business?: { coverPhoto: string };
+  menu?: { itemName: string };
+};
+
+export function toPromotionPost(row: PromotionRow): PromotionPost {
+  return {
+    id: row.id,
+    businessId: row.businessId,
+    branchId: row.branchId,
+    menuId: row.menuId,
+    menuItemName: row.menu?.itemName,
+    caption: row.caption,
+    description: row.description,
+    imageUrl: row.imageUrl ?? undefined,
+    coverPhotoFallback: row.business?.coverPhoto,
+    promotionType: row.promotionType,
+    discountPercent: row.discountPercent ?? undefined,
+    bundleType: row.bundleType ?? undefined,
+    buyQuantity: row.buyQuantity ?? undefined,
+    getQuantity: row.getQuantity ?? undefined,
+    bundleDiscountPercent: row.bundleDiscountPercent ?? undefined,
+    startDate: row.startDate.toISOString().slice(0, 10),
+    endDate: row.endDate.toISOString().slice(0, 10),
+    status: row.archived ? "archived" : "active",
+    createdAt: row.createdAt.toISOString().slice(0, 10),
   };
 }

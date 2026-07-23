@@ -35,6 +35,9 @@ const emptyForm = {
   isAvailable: true,
 };
 
+const fieldClass =
+  "w-full rounded-lg bg-search px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ink/10";
+
 export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -56,6 +59,13 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
   });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+
+  function softRefresh() {
+    startTransition(() => {
+      router.refresh();
+    });
+  }
 
   const businessName = (id: string) =>
     businesses.find((business) => business.id === id)?.businessName ?? "Unknown";
@@ -144,20 +154,52 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setFormError(null);
+    setFormSuccess(null);
+
+    const fd = buildFormData();
 
     startTransition(async () => {
-      const fd = buildFormData();
-      if (mode === "create") {
-        const result = await createMenuItemAction(
-          { ok: false, message: "" },
-          fd,
-        );
-        if (!result.ok) {
-          setFormError(result.message);
-          return;
+      try {
+        if (mode === "create") {
+          const result = await createMenuItemAction(
+            { ok: false, message: "" },
+            fd,
+          );
+          if (!result.ok) {
+            setFormError(result.message);
+            return;
+          }
+          setFormSuccess(result.message);
+        } else if (mode === "edit" && selected) {
+          fd.set("menuItemId", selected.id);
+          const result = await updateMenuItemAction(
+            { ok: false, message: "" },
+            fd,
+          );
+          if (!result.ok) {
+            setFormError(result.message);
+            return;
+          }
+          setFormSuccess(result.message);
         }
-      } else if (mode === "edit" && selected) {
-        fd.set("menuItemId", selected.id);
+        setMode("view");
+        softRefresh();
+      } catch {
+        setFormError("Something went wrong. Please try again.");
+      }
+    });
+  }
+
+  function toggleAvailability(item: MenuItem) {
+    startTransition(async () => {
+      try {
+        const fd = new FormData();
+        fd.set("menuItemId", item.id);
+        fd.set("itemName", item.itemName);
+        fd.set("description", item.description ?? "");
+        fd.set("price", String(item.price));
+        fd.set("category", item.category);
+        if (!item.isAvailable) fd.set("isAvailable", "true");
         const result = await updateMenuItemAction(
           { ok: false, message: "" },
           fd,
@@ -166,27 +208,10 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
           setFormError(result.message);
           return;
         }
+        softRefresh();
+      } catch {
+        setFormError("Could not update availability. Please try again.");
       }
-      setMode("view");
-      router.refresh();
-    });
-  }
-
-  function toggleAvailability(item: MenuItem) {
-    startTransition(async () => {
-      const fd = new FormData();
-      fd.set("menuItemId", item.id);
-      fd.set("itemName", item.itemName);
-      fd.set("description", item.description ?? "");
-      fd.set("price", String(item.price));
-      fd.set("category", item.category);
-      if (!item.isAvailable) fd.set("isAvailable", "true");
-      const result = await updateMenuItemAction({ ok: false, message: "" }, fd);
-      if (!result.ok) {
-        setFormError(result.message);
-        return;
-      }
-      router.refresh();
     });
   }
 
@@ -195,46 +220,29 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
     const id = deleteId;
     setDeleteId(null);
     startTransition(async () => {
-      const result = await deleteMenuItemAction(id);
-      if (!result.ok) {
-        setFormError(result.message);
-        return;
+      try {
+        const result = await deleteMenuItemAction(id);
+        if (!result.ok) {
+          setFormError(result.message);
+          return;
+        }
+        setMode("view");
+        setSelectedId(null);
+        setFormSuccess(result.message);
+        softRefresh();
+      } catch {
+        setFormError("Could not delete menu item. Please try again.");
       }
-      setMode("view");
-      setSelectedId(null);
-      router.refresh();
     });
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-display text-2xl font-semibold text-ink">Menu</h2>
-          <p className="mt-1 text-sm text-[#4b4b4b]">
-            Manage menu items per business — name, price, category, and
-            availability.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          disabled={businesses.length === 0 || pending}
-          className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-        >
-          Add Menu Item
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <label className="sr-only" htmlFor="menu-business-filter">
-          Filter by business
-        </label>
+    <div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-black/6 px-4 py-3">
         <select
-          id="menu-business-filter"
           value={businessFilter}
           onChange={(event) => setBusinessFilter(event.target.value)}
-          className="w-full rounded-full bg-search px-5 py-3 text-sm outline-none sm:max-w-xs"
+          className="rounded-lg bg-search px-2.5 py-2 text-sm outline-none"
         >
           <option value="all">All businesses</option>
           {businesses.map((business) => (
@@ -243,54 +251,57 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
             </option>
           ))}
         </select>
-        <div className="flex-1">
-          <SearchSortBar
-            query={query}
-            onQueryChange={setQuery}
-            sortLabel={sortDir === "asc" ? "A → Z" : "Z → A"}
-            onToggleSort={() =>
-              setSortDir((value) => (value === "asc" ? "desc" : "asc"))
-            }
-            placeholder="Search menu items..."
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["all", "All"],
-            ["available", "Available"],
-            ["unavailable", "Unavailable"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setAvailabilityFilter(value)}
-            className={`rounded-[10px] px-4 py-2 text-sm ${
-              availabilityFilter === value
-                ? "border border-ink bg-ink text-white"
-                : "bg-[#eaeaea] text-[#7c7c7c]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+        <select
+          value={availabilityFilter}
+          onChange={(event) =>
+            setAvailabilityFilter(
+              event.target.value as "all" | "available" | "unavailable",
+            )
+          }
+          className="rounded-lg bg-search px-2.5 py-2 text-sm outline-none"
+        >
+          <option value="all">All status</option>
+          <option value="available">Available</option>
+          <option value="unavailable">Unavailable</option>
+        </select>
+        <SearchSortBar
+          query={query}
+          onQueryChange={setQuery}
+          sortLabel={sortDir === "asc" ? "A–Z" : "Z–A"}
+          onToggleSort={() =>
+            setSortDir((value) => (value === "asc" ? "desc" : "asc"))
+          }
+          placeholder="Search menu…"
+        />
+        <button
+          type="button"
+          onClick={openCreate}
+          disabled={businesses.length === 0 || pending}
+          className="shrink-0 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+        >
+          Add
+        </button>
       </div>
 
       {formError && mode === "view" ? (
-        <p className="text-sm text-brand">{formError}</p>
+        <p className="border-b border-black/6 bg-[#fff0e7] px-4 py-2 text-xs text-brand-deep" role="alert">
+          {formError}
+        </p>
+      ) : null}
+      {formSuccess && mode === "view" ? (
+        <p className="border-b border-black/6 bg-emerald-50 px-4 py-2 text-xs text-emerald-800" role="status">
+          {formSuccess}
+        </p>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.2fr)]">
-        <div className="space-y-6">
+      <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="max-h-[70vh] overflow-y-auto border-b border-black/6 lg:border-b-0 lg:border-r">
           {groupedByCategory.map(({ category, items }) => (
-            <section key={category} className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+            <section key={category}>
+              <h3 className="sticky top-0 bg-[#fafafa] px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
                 {formatMenuCategory(category)}
               </h3>
-              <div className="space-y-3">
+              <div className="divide-y divide-black/5">
                 {items.map((item) => {
                   const active = selected?.id === item.id && mode === "view";
                   return (
@@ -302,37 +313,28 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
                         setMode("view");
                         setFormError(null);
                       }}
-                      className={`w-full rounded-[14px] border p-4 text-left transition-colors ${
-                        active
-                          ? "border-brand/40 bg-offer-hover"
-                          : "border-transparent bg-offer-static hover:bg-offer-hover"
+                      className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors ${
+                        active ? "bg-merchant" : "hover:bg-black/[0.02]"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-ink">
-                            {item.itemName}
-                          </p>
-                          <p className="mt-1 text-xs text-muted">
-                            {businessName(item.businessId)} ·{" "}
-                            {formatMenuPrice(item.price)}
-                          </p>
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                            item.isAvailable
-                              ? "bg-[#e8f8ef] text-green-700"
-                              : "bg-[#f0f0f0] text-[#666]"
-                          }`}
-                        >
-                          {item.isAvailable ? "Available" : "Unavailable"}
-                        </span>
-                      </div>
-                      {item.description ? (
-                        <p className="mt-2 line-clamp-2 text-xs text-[#4b4b4b]">
-                          {item.description}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-ink">
+                          {item.itemName}
                         </p>
-                      ) : null}
+                        <p className="truncate text-xs text-muted">
+                          {formatMenuPrice(item.price)}
+                          {businessFilter === "all"
+                            ? ` · ${businessName(item.businessId)}`
+                            : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 text-[10px] font-medium ${
+                          item.isAvailable ? "text-green-700" : "text-muted"
+                        }`}
+                      >
+                        {item.isAvailable ? "On" : "Off"}
+                      </span>
                     </button>
                   );
                 })}
@@ -340,99 +342,86 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
             </section>
           ))}
           {filtered.length === 0 ? (
-            <p className="rounded-[14px] bg-offer-static px-4 py-8 text-center text-sm text-[#4b4b4b]">
+            <p className="px-4 py-10 text-center text-sm text-muted">
               No menu items yet.
             </p>
           ) : null}
         </div>
 
-        <div className="rounded-[18px] border border-black/5 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:p-6">
+        <div className="p-4 sm:p-5">
           {mode === "view" && selected ? (
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[#fff0e7] px-3 py-1 text-xs font-medium text-brand">
-                  {formatMenuCategory(selected.category)}
-                </span>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    selected.isAvailable
-                      ? "bg-[#e8f8ef] text-green-700"
-                      : "bg-search text-[#555]"
-                  }`}
-                >
-                  {selected.isAvailable ? "Available" : "Unavailable"}
-                </span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                    {formatMenuCategory(selected.category)}
+                  </p>
+                  <h2 className="mt-0.5 font-display text-xl font-semibold text-ink">
+                    {selected.itemName}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted">
+                    {businessName(selected.businessId)} ·{" "}
+                    {formatMenuPrice(selected.price)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(selected)}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-black/[0.04]"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => toggleAvailability(selected)}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-black/[0.04] disabled:opacity-60"
+                  >
+                    {selected.isAvailable ? "Mark off" : "Mark on"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteId(selected.id)}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/5"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-              <h3 className="mt-4 font-display text-2xl font-semibold text-ink">
-                {selected.itemName}
-              </h3>
-              <p className="mt-2 text-sm text-brand">
-                {businessName(selected.businessId)}
-              </p>
               {selected.description ? (
-                <p className="mt-3 text-sm leading-6 text-[#4b4b4b]">
+                <p className="mt-4 text-sm leading-relaxed text-[#4b4b4b]">
                   {selected.description}
                 </p>
-              ) : null}
-              <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-                <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Price
-                  </dt>
-                  <dd className="mt-1 font-medium">
-                    {formatMenuPrice(selected.price)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Category
-                  </dt>
-                  <dd className="mt-1 font-medium">
-                    {formatMenuCategory(selected.category)}
-                  </dd>
-                </div>
-              </dl>
-              <div className="mt-6 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openEdit(selected)}
-                  className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white"
-                >
-                  Update
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => toggleAvailability(selected)}
-                  className="rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium text-ink disabled:opacity-60"
-                >
-                  Mark {selected.isAvailable ? "unavailable" : "available"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteId(selected.id)}
-                  className="rounded-full border border-brand px-5 py-2.5 text-sm font-medium text-brand"
-                >
-                  Delete
-                </button>
-              </div>
+              ) : (
+                <p className="mt-4 text-sm text-muted">No description.</p>
+              )}
             </div>
           ) : null}
 
           {mode === "view" && !selected ? (
-            <p className="py-10 text-center text-sm text-[#4b4b4b]">
-              Select a menu item or add a new one.
+            <p className="py-12 text-center text-sm text-muted">
+              Select an item or add a new one.
             </p>
           ) : null}
 
           {(mode === "create" || mode === "edit") && (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <h3 className="font-display text-2xl font-semibold text-ink">
-                {mode === "create" ? "Add Menu Item" : "Update Menu Item"}
-              </h3>
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-ink">
+                  {mode === "create" ? "New item" : "Edit item"}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setMode("view")}
+                  className="text-xs font-medium text-muted hover:text-ink"
+                >
+                  Cancel
+                </button>
+              </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">
+                <label className="mb-1 block text-xs font-medium text-muted">
                   Business
                 </label>
                 <select
@@ -445,7 +434,7 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
                       businessId: event.target.value,
                     }))
                   }
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none disabled:opacity-70"
+                  className={`${fieldClass} disabled:opacity-70`}
                 >
                   {businesses.map((business) => (
                     <option key={business.id} value={business.id}>
@@ -456,8 +445,8 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">
-                  Item name
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Name
                 </label>
                 <input
                   required
@@ -468,16 +457,16 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
                       itemName: event.target.value,
                     }))
                   }
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                  className={fieldClass}
                 />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-medium">
+                <label className="mb-1 block text-xs font-medium text-muted">
                   Description
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={form.description}
                   onChange={(event) =>
                     setForm((prev) => ({
@@ -485,15 +474,14 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
                       description: event.target.value,
                     }))
                   }
-                  placeholder="Optional"
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                  className={fieldClass}
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    Price (₱)
+                  <label className="mb-1 block text-xs font-medium text-muted">
+                    Price
                   </label>
                   <input
                     type="number"
@@ -507,11 +495,11 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
                         price: Number(event.target.value),
                       }))
                     }
-                    className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                    className={fieldClass}
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium">
+                  <label className="mb-1 block text-xs font-medium text-muted">
                     Category
                   </label>
                   <select
@@ -523,7 +511,7 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
                         category: event.target.value as MenuCategory,
                       }))
                     }
-                    className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                    className={fieldClass}
                   >
                     {MENU_CATEGORIES.map((category) => (
                       <option key={category} value={category}>
@@ -544,35 +532,29 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
                       isAvailable: event.target.checked,
                     }))
                   }
-                  className="size-4 rounded border-black/20"
+                  className="size-3.5 rounded border-black/20"
                 />
-                Available for ordering
+                Available
               </label>
 
               {formError ? (
-                <p className="text-sm text-brand">{formError}</p>
+                <p className="rounded-lg bg-[#fff0e7] px-3 py-2 text-xs text-brand-deep" role="alert">
+                  {formError}
+                </p>
+              ) : null}
+              {formSuccess ? (
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800" role="status">
+                  {formSuccess}
+                </p>
               ) : null}
 
-              <div className="flex flex-wrap gap-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {pending
-                    ? "Saving…"
-                    : mode === "create"
-                      ? "Add item"
-                      : "Save changes"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode("view")}
-                  className="rounded-full px-5 py-2.5 text-sm font-medium text-ink hover:bg-black/5"
-                >
-                  Cancel
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={pending}
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {pending ? "Saving…" : mode === "create" ? "Add" : "Save"}
+              </button>
             </form>
           )}
         </div>
@@ -581,7 +563,7 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
       <ConfirmDialog
         open={!!deleteId}
         title="Delete menu item?"
-        message="This permanently removes the item from this business menu."
+        message="This permanently removes the item."
         confirmLabel="Delete"
         onCancel={() => setDeleteId(null)}
         onConfirm={confirmDelete}

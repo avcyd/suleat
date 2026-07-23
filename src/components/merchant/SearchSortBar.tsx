@@ -16,20 +16,20 @@ export function SearchSortBar({
   placeholder = "Search...",
 }: SearchSortBarProps) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <div className="flex min-w-0 flex-1 items-center gap-2">
       <input
         type="search"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full flex-1 rounded-full bg-search px-5 py-3 text-sm outline-none placeholder:text-muted focus:ring-1 focus:ring-ink/10"
+        className="min-w-0 flex-1 rounded-lg bg-search px-3 py-2 text-sm outline-none placeholder:text-muted focus:ring-1 focus:ring-ink/10"
       />
       <button
         type="button"
         onClick={onToggleSort}
-        className="inline-flex shrink-0 items-center justify-center rounded-full bg-ink px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        className="shrink-0 rounded-lg px-2.5 py-2 text-xs font-medium text-[#555] hover:bg-black/[0.04]"
       >
-        Sort: {sortLabel}
+        {sortLabel}
       </button>
     </div>
   );

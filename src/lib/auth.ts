@@ -81,16 +81,14 @@ export const authOptions: NextAuthOptions = {
      * jwt callback
      * Persist custom fields on the encrypted JWT cookie.
      */
-    async jwt({ token, user, trigger }) {
-      // `user` is only present right after a successful sign-in.
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = user.role;
       }
 
-      // Refresh role from DB when the client calls session.update()
-      // (e.g. after becoming a merchant).
-      if (trigger === "update" && token.id) {
+      // Keep role fresh (e.g. after becoming a merchant).
+      if (token.id) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: { role: true },

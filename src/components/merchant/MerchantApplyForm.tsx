@@ -2,11 +2,10 @@
 
 /**
  * Become-a-merchant form (homepage CTA → /merchants).
- * Creates Merchant profile and upgrades User.role to MERCHANT.
+ * Submits a pending application; MERCHANT role is granted only after admin approval.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { useActionState, useEffect } from "react";
 import {
   createMerchantAction,
@@ -24,22 +23,15 @@ const fieldClass =
 
 export function MerchantApplyForm() {
   const router = useRouter();
-  const { update } = useSession();
   const [state, formAction, pending] = useActionState(
     createMerchantAction,
     initialState,
   );
 
   useEffect(() => {
-    async function finish() {
-      if (!state.ok) return;
-      // Refresh JWT so role becomes MERCHANT before hitting the dashboard.
-      await update();
-      router.push("/merchant/dashboard");
-      router.refresh();
-    }
-    void finish();
-  }, [state.ok, update, router]);
+    if (!state.ok) return;
+    router.refresh();
+  }, [state.ok, router]);
 
   return (
     <div className="mx-auto w-full max-w-lg">
@@ -48,13 +40,16 @@ export function MerchantApplyForm() {
         Become a merchant
       </h1>
       <p className="mt-2 text-sm text-[#4b4b4b]">
-        Create your merchant profile to list businesses, menus, and promotions
-        on Suleat.
+        Submit your company details. An admin will review your application
+        before you can access the merchant dashboard.
       </p>
 
       <form action={formAction} className="mt-8 space-y-4">
         <div>
-          <label className="mb-1.5 block text-sm font-medium" htmlFor="companyName">
+          <label
+            className="mb-1.5 block text-sm font-medium"
+            htmlFor="companyName"
+          >
             Company name
           </label>
           <input
@@ -67,7 +62,10 @@ export function MerchantApplyForm() {
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-medium" htmlFor="phoneNumber">
+          <label
+            className="mb-1.5 block text-sm font-medium"
+            htmlFor="phoneNumber"
+          >
             Phone number
           </label>
           <input
@@ -79,7 +77,9 @@ export function MerchantApplyForm() {
             className={fieldClass}
             placeholder="09171234567"
           />
-          <p className="mt-1 text-xs text-muted">Digits only, up to 12 characters.</p>
+          <p className="mt-1 text-xs text-muted">
+            Digits only, up to 12 characters.
+          </p>
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium" htmlFor="taxId">
@@ -98,23 +98,33 @@ export function MerchantApplyForm() {
           <p className="mt-1 text-xs text-muted">Exactly 12 digits.</p>
         </div>
 
-        {state.message && !state.ok ? (
-          <p className="rounded-[10px] bg-[#fff0e7] px-4 py-3 text-sm text-brand">
+        {state.message ? (
+          <p
+            className={`rounded-[10px] px-4 py-3 text-sm ${
+              state.ok
+                ? "bg-emerald-50 text-emerald-800"
+                : "bg-[#fff0e7] text-brand"
+            }`}
+          >
             {state.message}
           </p>
         ) : null}
 
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || state.ok}
           className="btn-primary w-full disabled:opacity-60"
         >
-          {pending ? "Creating profile…" : "Create merchant account"}
+          {pending
+            ? "Submitting…"
+            : state.ok
+              ? "Application submitted"
+              : "Submit application"}
         </button>
       </form>
 
       <p className="mt-6 text-center text-sm text-[#4b4b4b]">
-        Already a merchant?{" "}
+        Already approved?{" "}
         <Link href="/merchant/dashboard" className="font-medium text-brand">
           Go to dashboard
         </Link>

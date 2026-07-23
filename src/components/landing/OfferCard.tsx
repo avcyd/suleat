@@ -1,20 +1,41 @@
-import Image from "next/image";
-import Link from "next/link";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { SmartImage } from "@/components/ui/SmartImage";
 import type { Offer } from "@/types/landing";
 
 type OfferCardProps = {
   offer: Offer;
+  onOpen: (offer: Offer) => void;
 };
 
-export function OfferCard({ offer }: OfferCardProps) {
+export function OfferCard({ offer, onOpen }: OfferCardProps) {
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const [showSeeMore, setShowSeeMore] = useState(false);
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      setShowSeeMore(el.scrollHeight > el.clientHeight + 1);
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [offer.description]);
+
   return (
     <article className="group relative overflow-hidden rounded-[10px] bg-offer-static transition-colors duration-500 ease-out hover:bg-offer-hover">
-      <Link
-        href={offer.href}
-        className="flex flex-col gap-3 p-3 sm:flex-row sm:items-stretch sm:gap-4"
+      <button
+        type="button"
+        onClick={() => onOpen(offer)}
+        className="flex w-full flex-col gap-3 p-3 text-left sm:flex-row sm:items-stretch sm:gap-4"
       >
         <div className="relative mx-auto h-[168px] w-full max-w-[199px] shrink-0 overflow-hidden rounded-[8px] sm:mx-0 sm:w-[199px]">
-          <Image
+          <SmartImage
             src={offer.image}
             alt={offer.title}
             fill
@@ -30,12 +51,17 @@ export function OfferCard({ offer }: OfferCardProps) {
           <h3 className="font-display text-xl font-semibold text-ink sm:text-2xl">
             {offer.title}
           </h3>
-          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#363636]">
-            {offer.description}{" "}
-            <span className="text-brand transition-colors group-hover:text-brand-deep">
+          <p
+            ref={textRef}
+            className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#363636]"
+          >
+            {offer.description}
+          </p>
+          {showSeeMore ? (
+            <span className="mt-1 text-sm text-brand transition-colors group-hover:text-brand-deep">
               See More
             </span>
-          </p>
+          ) : null}
           <p className="mt-2 line-clamp-1 text-sm italic font-light text-[#797979]">
             {offer.address}
           </p>
@@ -48,7 +74,7 @@ export function OfferCard({ offer }: OfferCardProps) {
             </span>
           </div>
         </div>
-      </Link>
+      </button>
     </article>
   );
 }

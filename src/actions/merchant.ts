@@ -4,7 +4,7 @@
  * Merchant Server Actions
  * -----------------------
  * Session → FormData → Zod → merchant service.
- * Creating a merchant also upgrades User.role to MERCHANT.
+ * Applying creates a pending Merchant profile; ADMIN must approve before MERCHANT role.
  */
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/session";
@@ -30,7 +30,7 @@ function formFields(formData: FormData) {
   };
 }
 
-/** Create a Merchant row for the logged-in user (upgrades role to MERCHANT). */
+/** Submit a merchant application (pending until admin approval). */
 export async function createMerchantAction(
   _prevState: MerchantActionState,
   formData: FormData,
@@ -50,9 +50,14 @@ export async function createMerchantAction(
 
   try {
     await createMerchant(session.user.id, parsed.data);
-    revalidatePath("/merchant/dashboard");
     revalidatePath("/merchants");
-    return { ok: true, message: "Merchant profile created." };
+    revalidatePath("/admin/dashboard");
+    revalidatePath("/");
+    return {
+      ok: true,
+      message:
+        "Application submitted. An admin will review it before you get merchant access.",
+    };
   } catch (error) {
     return {
       ok: false,

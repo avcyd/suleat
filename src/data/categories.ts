@@ -1,52 +1,59 @@
 import type { Category } from "@/types/landing";
 
+/** Homepage category tiles → /offers with matching category filter. */
 export const categories: Category[] = [
   {
     id: "beverage",
     name: "Beverage",
     image: "/images/landing/category-beverage.png",
-    href: "/categories/beverage",
+    href: "/offers?category=Beverage",
   },
   {
     id: "pastry",
     name: "Pastry",
     image: "/images/landing/category-pastry.png",
-    href: "/categories/pastry",
+    href: "/offers?category=Pastry",
   },
   {
     id: "pasta",
     name: "Pasta",
     image: "/images/landing/category-pasta.png",
-    href: "/categories/pasta",
+    href: "/offers?category=Pasta",
   },
   {
     id: "dessert",
     name: "Dessert",
     image: "/images/landing/category-dessert.png",
-    href: "/categories/dessert",
+    href: "/offers?category=Dessert",
   },
   {
     id: "pizza",
     name: "Pizza",
     image: "/images/landing/category-pizza.png",
-    href: "/categories/pizza",
+    href: "/offers?category=Pizza",
   },
   {
     id: "chicken",
     name: "Chicken",
     image: "/images/landing/category-chicken.png",
-    href: "/categories/chicken",
+    href: "/offers?category=Chicken",
   },
   {
     id: "burger",
     name: "Burger",
     image: "/images/landing/category-burger.jpg",
-    href: "/categories/burger",
+    href: "/offers?category=Burger",
   },
   {
     id: "pork",
     name: "Pork",
     image: "/images/landing/category-pork.jpg",
-    href: "/categories/pork",
+    href: "/offers?category=Pork",
+  },
+  {
+    id: "other",
+    name: "Other",
+    image: "/images/landing/offer-donut.jpg",
+    href: "/offers?category=Other",
   },
 ];
