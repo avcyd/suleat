@@ -3,12 +3,20 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
+/**
+ * Prisma CLI (migrate, db push, etc.) must use a *direct* Postgres URL.
+ * Pooled hosts (pooled.db.prisma.io) break session advisory locks → P1002 on
+ * `prisma migrate deploy` (common on Vercel builds).
+ *
+ * App runtime keeps using DATABASE_URL (pooled) via the driver adapter in src/lib/prisma.ts.
+ * Set DIRECT_URL in Vercel/.env to the same credentials with host `db.prisma.io`.
+ */
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });
