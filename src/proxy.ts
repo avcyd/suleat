@@ -23,9 +23,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Business dashboard is merchant-only.
+  // Business dashboard is merchant-only; send others to apply flow.
   if (isMerchantRoute && token.role !== "MERCHANT") {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/merchants", request.url));
   }
 
   return NextResponse.next();

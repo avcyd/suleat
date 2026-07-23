@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, useMemo, useState, useTransition } from "react";
+import {
+  createMenuItemAction,
+  deleteMenuItemAction,
+  updateMenuItemAction,
+} from "@/actions/menu";
 import type {
   BusinessProfile,
   MenuCategory,
@@ -18,9 +24,6 @@ import { SearchSortBar } from "./SearchSortBar";
 type MenuPanelProps = {
   businesses: BusinessProfile[];
   menuItems: MenuItem[];
-  onCreate: (item: Omit<MenuItem, "id">) => void;
-  onUpdate: (item: MenuItem) => void;
-  onDelete: (id: string) => void;
 };
 
 const emptyForm = {
@@ -32,13 +35,9 @@ const emptyForm = {
   isAvailable: true,
 };
 
-export function MenuPanel({
-  businesses,
-  menuItems,
-  onCreate,
-  onUpdate,
-  onDelete,
-}: MenuPanelProps) {
+export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const [businessFilter, setBusinessFilter] = useState<string>(
     businesses[0]?.id ?? "all",
   );
@@ -56,6 +55,7 @@ export function MenuPanel({
     businessId: businesses[0]?.id ?? "",
   });
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const businessName = (id: string) =>
     businesses.find((business) => business.id === id)?.businessName ?? "Unknown";
@@ -106,6 +106,7 @@ export function MenuPanel({
 
   function openCreate() {
     setMode("create");
+    setFormError(null);
     setForm({
       ...emptyForm,
       businessId:
@@ -118,6 +119,7 @@ export function MenuPanel({
   function openEdit(item: MenuItem) {
     setSelectedId(item.id);
     setMode("edit");
+    setFormError(null);
     setForm({
       businessId: item.businessId,
       itemName: item.itemName,
@@ -128,35 +130,87 @@ export function MenuPanel({
     });
   }
 
+  function buildFormData() {
+    const fd = new FormData();
+    fd.set("businessId", form.businessId);
+    fd.set("itemName", form.itemName);
+    fd.set("description", form.description);
+    fd.set("price", String(form.price));
+    fd.set("category", form.category);
+    if (form.isAvailable) fd.set("isAvailable", "true");
+    return fd;
+  }
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const payload: Omit<MenuItem, "id"> = {
-      businessId: form.businessId,
-      itemName: form.itemName.trim(),
-      description: form.description.trim() || undefined,
-      price: Number(form.price),
-      category: form.category,
-      isAvailable: form.isAvailable,
-    };
+    setFormError(null);
 
-    if (mode === "create") {
-      onCreate(payload);
+    startTransition(async () => {
+      const fd = buildFormData();
+      if (mode === "create") {
+        const result = await createMenuItemAction(
+          { ok: false, message: "" },
+          fd,
+        );
+        if (!result.ok) {
+          setFormError(result.message);
+          return;
+        }
+      } else if (mode === "edit" && selected) {
+        fd.set("menuItemId", selected.id);
+        const result = await updateMenuItemAction(
+          { ok: false, message: "" },
+          fd,
+        );
+        if (!result.ok) {
+          setFormError(result.message);
+          return;
+        }
+      }
       setMode("view");
-      return;
-    }
-    if (mode === "edit" && selected) {
-      onUpdate({ ...selected, ...payload });
+      router.refresh();
+    });
+  }
+
+  function toggleAvailability(item: MenuItem) {
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("menuItemId", item.id);
+      fd.set("itemName", item.itemName);
+      fd.set("description", item.description ?? "");
+      fd.set("price", String(item.price));
+      fd.set("category", item.category);
+      if (!item.isAvailable) fd.set("isAvailable", "true");
+      const result = await updateMenuItemAction({ ok: false, message: "" }, fd);
+      if (!result.ok) {
+        setFormError(result.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function confirmDelete() {
+    if (!deleteId) return;
+    const id = deleteId;
+    setDeleteId(null);
+    startTransition(async () => {
+      const result = await deleteMenuItemAction(id);
+      if (!result.ok) {
+        setFormError(result.message);
+        return;
+      }
       setMode("view");
-    }
+      setSelectedId(null);
+      router.refresh();
+    });
   }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-display text-2xl font-semibold text-ink">
-            Menu
-          </h2>
+          <h2 className="font-display text-2xl font-semibold text-ink">Menu</h2>
           <p className="mt-1 text-sm text-[#4b4b4b]">
             Manage menu items per business — name, price, category, and
             availability.
@@ -165,7 +219,7 @@ export function MenuPanel({
         <button
           type="button"
           onClick={openCreate}
-          disabled={businesses.length === 0}
+          disabled={businesses.length === 0 || pending}
           className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           Add Menu Item
@@ -225,6 +279,10 @@ export function MenuPanel({
         ))}
       </div>
 
+      {formError && mode === "view" ? (
+        <p className="text-sm text-brand">{formError}</p>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.2fr)]">
         <div className="space-y-6">
           {groupedByCategory.map(({ category, items }) => (
@@ -242,6 +300,7 @@ export function MenuPanel({
                       onClick={() => {
                         setSelectedId(item.id);
                         setMode("view");
+                        setFormError(null);
                       }}
                       className={`w-full rounded-[14px] border p-4 text-left transition-colors ${
                         active
@@ -282,7 +341,7 @@ export function MenuPanel({
           ))}
           {filtered.length === 0 ? (
             <p className="rounded-[14px] bg-offer-static px-4 py-8 text-center text-sm text-[#4b4b4b]">
-              No menu items match your filters.
+              No menu items yet.
             </p>
           ) : null}
         </div>
@@ -343,13 +402,9 @@ export function MenuPanel({
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    onUpdate({
-                      ...selected,
-                      isAvailable: !selected.isAvailable,
-                    })
-                  }
-                  className="rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium text-ink"
+                  disabled={pending}
+                  onClick={() => toggleAvailability(selected)}
+                  className="rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium text-ink disabled:opacity-60"
                 >
                   Mark {selected.isAvailable ? "unavailable" : "available"}
                 </button>
@@ -383,13 +438,14 @@ export function MenuPanel({
                 <select
                   required
                   value={form.businessId}
+                  disabled={mode === "edit"}
                   onChange={(event) =>
                     setForm((prev) => ({
                       ...prev,
                       businessId: event.target.value,
                     }))
                   }
-                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none"
+                  className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none disabled:opacity-70"
                 >
                   {businesses.map((business) => (
                     <option key={business.id} value={business.id}>
@@ -493,12 +549,21 @@ export function MenuPanel({
                 Available for ordering
               </label>
 
+              {formError ? (
+                <p className="text-sm text-brand">{formError}</p>
+              ) : null}
+
               <div className="flex flex-wrap gap-2 pt-2">
                 <button
                   type="submit"
-                  className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white"
+                  disabled={pending}
+                  className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
                 >
-                  {mode === "create" ? "Add item" : "Save changes"}
+                  {pending
+                    ? "Saving…"
+                    : mode === "create"
+                      ? "Add item"
+                      : "Save changes"}
                 </button>
                 <button
                   type="button"
@@ -519,11 +584,7 @@ export function MenuPanel({
         message="This permanently removes the item from this business menu."
         confirmLabel="Delete"
         onCancel={() => setDeleteId(null)}
-        onConfirm={() => {
-          if (deleteId) onDelete(deleteId);
-          setDeleteId(null);
-          setMode("view");
-        }}
+        onConfirm={confirmDelete}
       />
     </div>
   );

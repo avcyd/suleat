@@ -1,30 +1,37 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState } from "react";
+import {
+  updateMerchantAction,
+  type MerchantActionState,
+} from "@/actions/merchant";
 import type { MerchantAccount } from "@/types/merchant";
-import { ConfirmDialog } from "./ConfirmDialog";
 
 type AccountPanelProps = {
   account: MerchantAccount;
-  onUpdate: (account: MerchantAccount) => void;
-  onDelete: () => void;
 };
 
-export function AccountPanel({
-  account,
-  onUpdate,
-  onDelete,
-}: AccountPanelProps) {
-  const [form, setForm] = useState(account);
-  const [saved, setSaved] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+const initialState: MerchantActionState = {
+  ok: false,
+  message: "",
+};
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    onUpdate(form);
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2000);
-  }
+export function AccountPanel({ account }: AccountPanelProps) {
+  const router = useRouter();
+  const [state, formAction, pending] = useActionState(
+    updateMerchantAction,
+    initialState,
+  );
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => {
+    if (!state.ok) return;
+    setSavedFlash(true);
+    router.refresh();
+    const timer = window.setTimeout(() => setSavedFlash(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [state.ok, state.message, router]);
 
   return (
     <div className="space-y-5">
@@ -33,80 +40,94 @@ export function AccountPanel({
           Account Management
         </h2>
         <p className="mt-1 text-sm text-[#4b4b4b]">
-          Update your merchant account details or delete the account.
+          Update your merchant company details. Display name and email come from
+          your user account.
         </p>
       </div>
 
       <form
-        onSubmit={handleSubmit}
+        action={formAction}
         className="max-w-xl space-y-4 rounded-[18px] border border-black/5 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:p-6"
       >
-        {(
-          [
-            ["displayName", "Display name"],
-            ["email", "Email"],
-            ["companyName", "Company name"],
-            ["phoneNumber", "Phone number"],
-            ["taxId", "Tax ID"],
-          ] as const
-        ).map(([key, label]) => (
-          <div key={key}>
-            <label className="mb-1.5 block text-sm font-medium text-ink">
-              {label}
-            </label>
-            <input
-              required
-              type={key === "email" ? "email" : "text"}
-              value={form[key]}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, [key]: event.target.value }))
-              }
-              className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
-            />
-          </div>
-        ))}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink">
+            Display name
+          </label>
+          <input
+            disabled
+            value={account.displayName}
+            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm text-muted outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink">
+            Email
+          </label>
+          <input
+            disabled
+            type="email"
+            value={account.email}
+            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm text-muted outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink">
+            Company name
+          </label>
+          <input
+            required
+            name="companyName"
+            defaultValue={account.companyName}
+            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink">
+            Phone number
+          </label>
+          <input
+            required
+            name="phoneNumber"
+            defaultValue={account.phoneNumber}
+            inputMode="numeric"
+            maxLength={12}
+            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink">
+            Tax ID
+          </label>
+          <input
+            required
+            name="taxId"
+            defaultValue={account.taxId}
+            inputMode="numeric"
+            maxLength={12}
+            minLength={12}
+            className="w-full rounded-[10px] bg-search px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-ink/10"
+          />
+        </div>
+
+        {state.message && !state.ok ? (
+          <p className="text-sm text-brand">{state.message}</p>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <button
             type="submit"
-            className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white"
+            disabled={pending}
+            className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
           >
-            Update Account
+            {pending ? "Saving…" : "Update Account"}
           </button>
-          {saved ? (
+          {savedFlash ? (
             <span className="text-sm font-medium text-green-700">
               Changes saved
             </span>
           ) : null}
         </div>
       </form>
-
-      <div className="max-w-xl rounded-[18px] border border-brand/20 bg-[#fff7f7] p-5 sm:p-6">
-        <h3 className="font-semibold text-brand-deep">Danger zone</h3>
-        <p className="mt-1 text-sm text-[#4b4b4b]">
-          Deleting your merchant account removes access to the dashboard. This
-          frontend mock only clears local state.
-        </p>
-        <button
-          type="button"
-          onClick={() => setConfirmDelete(true)}
-          className="mt-4 rounded-full border border-brand px-5 py-2.5 text-sm font-medium text-brand"
-        >
-          Delete Account
-        </button>
-      </div>
-
-      <ConfirmDialog
-        open={confirmDelete}
-        title="Delete merchant account?"
-        message="You will lose access to business profiles and promotions in this dashboard session."
-        confirmLabel="Delete account"
-        onCancel={() => setConfirmDelete(false)}
-        onConfirm={() => {
-          setConfirmDelete(false);
-          onDelete();
-        }}
-      />
     </div>
   );
 }

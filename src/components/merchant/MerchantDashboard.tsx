@@ -1,12 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  mockBusinesses,
-  mockMenuItems,
-  mockMerchantAccount,
-  mockPromotions,
-} from "@/data/merchant";
 import type {
   BusinessProfile,
   MenuItem,
@@ -27,28 +21,25 @@ const tabs: { id: TabId; label: string }[] = [
   { id: "account", label: "Account" },
 ];
 
-function createId(prefix: string) {
-  return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
-}
+type MerchantDashboardProps = {
+  account: MerchantAccount;
+  businesses: BusinessProfile[];
+  menuItems: MenuItem[];
+};
 
 /**
  * Merchant Business Dashboard
  * ---------------------------
- * Frontend-only dashboard covering:
- * - Business profile CRUD + multi-branch management
- * - Menu CRUD per business
- * - Promotion CRUD (branch-scoped) + archive + search/sort
- * - Account update / delete
+ * Account / businesses / menu are backed by server data + actions.
+ * Promotions remain local mock until that domain is wired.
  */
-export function MerchantDashboard() {
+export function MerchantDashboard({
+  account,
+  businesses,
+  menuItems,
+}: MerchantDashboardProps) {
   const [tab, setTab] = useState<TabId>("businesses");
-  const [businesses, setBusinesses] =
-    useState<BusinessProfile[]>(mockBusinesses);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(mockMenuItems);
-  const [promotions, setPromotions] =
-    useState<PromotionPost[]>(mockPromotions);
-  const [account, setAccount] =
-    useState<MerchantAccount | null>(mockMerchantAccount);
+  const [promotions, setPromotions] = useState<PromotionPost[]>([]);
 
   const stats = useMemo(
     () => ({
@@ -61,20 +52,6 @@ export function MerchantDashboard() {
     }),
     [businesses, menuItems, promotions],
   );
-
-  if (!account) {
-    return (
-      <main className="mx-auto max-w-[914px] px-4 py-16 text-center sm:px-6">
-        <h1 className="font-display text-3xl font-semibold text-ink">
-          Account deleted
-        </h1>
-        <p className="mt-3 text-sm text-[#4b4b4b]">
-          Refresh the page to restore mock merchant data, or register a new
-          merchant account later.
-        </p>
-      </main>
-    );
-  }
 
   return (
     <main className="mx-auto w-full max-w-[1100px] px-4 py-8 sm:px-6 sm:py-10">
@@ -116,67 +93,11 @@ export function MerchantDashboard() {
 
       <div className="mt-6">
         {tab === "businesses" ? (
-          <BusinessesPanel
-            businesses={businesses}
-            onCreate={(payload) => {
-              const next: BusinessProfile = {
-                ...payload,
-                id: createId("biz"),
-                createdAt: new Date().toISOString().slice(0, 10),
-              };
-              setBusinesses((prev) => [next, ...prev]);
-            }}
-            onUpdate={(updated) => {
-              const branchIds = new Set(
-                updated.branches.map((branch) => branch.id),
-              );
-              setBusinesses((prev) =>
-                prev.map((business) =>
-                  business.id === updated.id ? updated : business,
-                ),
-              );
-              setPromotions((prev) =>
-                prev.filter(
-                  (promo) =>
-                    promo.businessId !== updated.id ||
-                    branchIds.has(promo.branchId),
-                ),
-              );
-            }}
-            onDelete={(id) => {
-              setBusinesses((prev) =>
-                prev.filter((business) => business.id !== id),
-              );
-              setMenuItems((prev) =>
-                prev.filter((item) => item.businessId !== id),
-              );
-              setPromotions((prev) =>
-                prev.filter((promo) => promo.businessId !== id),
-              );
-            }}
-          />
+          <BusinessesPanel businesses={businesses} />
         ) : null}
 
         {tab === "menu" ? (
-          <MenuPanel
-            businesses={businesses}
-            menuItems={menuItems}
-            onCreate={(payload) => {
-              const next: MenuItem = {
-                ...payload,
-                id: createId("menu"),
-              };
-              setMenuItems((prev) => [next, ...prev]);
-            }}
-            onUpdate={(updated) => {
-              setMenuItems((prev) =>
-                prev.map((item) => (item.id === updated.id ? updated : item)),
-              );
-            }}
-            onDelete={(id) => {
-              setMenuItems((prev) => prev.filter((item) => item.id !== id));
-            }}
-          />
+          <MenuPanel businesses={businesses} menuItems={menuItems} />
         ) : null}
 
         {tab === "promotions" ? (
@@ -186,7 +107,7 @@ export function MerchantDashboard() {
             onCreate={(payload) => {
               const next: PromotionPost = {
                 ...payload,
-                id: createId("promo"),
+                id: `promo-${Math.random().toString(36).slice(2, 9)}`,
                 status: "active",
                 createdAt: new Date().toISOString().slice(0, 10),
               };
@@ -212,13 +133,7 @@ export function MerchantDashboard() {
           />
         ) : null}
 
-        {tab === "account" ? (
-          <AccountPanel
-            account={account}
-            onUpdate={setAccount}
-            onDelete={() => setAccount(null)}
-          />
-        ) : null}
+        {tab === "account" ? <AccountPanel account={account} /> : null}
       </div>
     </main>
   );
