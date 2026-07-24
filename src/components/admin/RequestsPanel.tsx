@@ -68,6 +68,8 @@ export function RequestsPanel({
           baseParams={baseParams}
           currentSort={sort}
           sortOptions={[
+            { value: "-id", label: "Newest" },
+            { value: "id", label: "Oldest" },
             { value: "companyName", label: "Company A–Z" },
             { value: "-companyName", label: "Company Z–A" },
             { value: "email", label: "Email A–Z" },

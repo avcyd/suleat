@@ -10,8 +10,14 @@ import {
 } from "@/actions/business";
 import { SmartImage } from "@/components/ui/SmartImage";
 import { isAllowedImageSrc } from "@/lib/images";
-import type { BranchLocation, BusinessProfile, SortDirection } from "@/types/merchant";
+import type { BranchLocation, BusinessProfile } from "@/types/merchant";
 import { formatBranchAddress, formatBranchLabel } from "@/types/merchant";
+import {
+  BUSINESS_SORT_OPTIONS,
+  parseBusinessSort,
+  searchBusinesses,
+  sortBusinesses,
+} from "@/lib/algorithms/merchant";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { SearchSortBar } from "./SearchSortBar";
 
@@ -53,7 +59,8 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
-  const [sortDir, setSortDir] = useState<SortDirection>("asc");
+  const [draftSort, setDraftSort] = useState<string>(BUSINESS_SORT_OPTIONS[0].value);
+  const [appliedSort, setAppliedSort] = useState<string>(BUSINESS_SORT_OPTIONS[0].value);
   const [selectedId, setSelectedId] = useState<string | null>(
     businesses[0]?.id ?? null,
   );
@@ -72,28 +79,11 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
   }, [businesses, selectedId]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = businesses.filter((business) => {
-      if (!q) return true;
-      const branchHit = business.branches.some(
-        (branch) =>
-          branch.city.toLowerCase().includes(q) ||
-          branch.barangay.toLowerCase().includes(q) ||
-          branch.street.toLowerCase().includes(q) ||
-          formatBranchLabel(branch).toLowerCase().includes(q),
-      );
-      return (
-        business.businessName.toLowerCase().includes(q) ||
-        business.description.toLowerCase().includes(q) ||
-        branchHit
-      );
-    });
-
-    return [...list].sort((a, b) => {
-      const cmp = a.businessName.localeCompare(b.businessName);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [businesses, query, sortDir]);
+    // Linear Search (partial name / location) → Insertion Sort (small n).
+    const matched = searchBusinesses(businesses, query);
+    const { key, direction } = parseBusinessSort(appliedSort);
+    return sortBusinesses(matched, key, direction);
+  }, [businesses, query, appliedSort]);
 
   const selected =
     filtered.find((business) => business.id === selectedId) ??
@@ -293,10 +283,10 @@ export function BusinessesPanel({ businesses }: BusinessesPanelProps) {
         <SearchSortBar
           query={query}
           onQueryChange={setQuery}
-          sortLabel={sortDir === "asc" ? "A–Z" : "Z–A"}
-          onToggleSort={() =>
-            setSortDir((value) => (value === "asc" ? "desc" : "asc"))
-          }
+          sortOptions={[...BUSINESS_SORT_OPTIONS]}
+          sortValue={draftSort}
+          onSortValueChange={setDraftSort}
+          onSort={() => setAppliedSort(draftSort)}
           placeholder="Search businesses…"
         />
         <button

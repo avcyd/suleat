@@ -16,7 +16,6 @@ import type {
   MenuItem,
   PromotionPost,
   PromotionType,
-  SortDirection,
 } from "@/types/merchant";
 import {
   formatBranchAddress,
@@ -24,6 +23,12 @@ import {
   formatPromotionDeal,
   getEffectiveDiscountPercent,
 } from "@/types/merchant";
+import {
+  PROMOTION_SORT_OPTIONS,
+  parsePromotionSort,
+  searchPromotions,
+  sortPromotions,
+} from "@/lib/algorithms/merchant";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { SearchSortBar } from "./SearchSortBar";
 
@@ -69,7 +74,12 @@ export function PromotionsPanel({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
-  const [sortDir, setSortDir] = useState<SortDirection>("desc");
+  const [draftSort, setDraftSort] = useState<string>(
+    PROMOTION_SORT_OPTIONS[0].value,
+  );
+  const [appliedSort, setAppliedSort] = useState<string>(
+    PROMOTION_SORT_OPTIONS[0].value,
+  );
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "archived">(
     "all",
   );
@@ -130,27 +140,23 @@ export function PromotionsPanel({
   }, [businessesWithBranches, menuItems]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = promotions.filter((promo) => {
-      const branch = branchFor(promo.businessId, promo.branchId);
-      const matchesStatus =
-        statusFilter === "all" ? true : promo.status === statusFilter;
-      const matchesQuery =
-        !q ||
-        promo.caption.toLowerCase().includes(q) ||
-        promo.description.toLowerCase().includes(q) ||
-        businessName(promo.businessId).toLowerCase().includes(q) ||
-        (promo.menuItemName?.toLowerCase().includes(q) ?? false) ||
-        formatPromotionDeal(promo).toLowerCase().includes(q) ||
-        (branch ? formatBranchLabel(branch).toLowerCase().includes(q) : false);
-      return matchesStatus && matchesQuery;
-    });
+    const scoped = promotions.filter((promo) =>
+      statusFilter === "all" ? true : promo.status === statusFilter,
+    );
 
-    return [...list].sort((a, b) => {
-      const cmp = a.createdAt.localeCompare(b.createdAt);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [promotions, query, sortDir, statusFilter, businesses, menuItems]);
+    // Linear Search → Merge Sort (caption or expiration).
+    const matched = searchPromotions(
+      scoped,
+      query,
+      businessName,
+      (promo) => {
+        const branch = branchFor(promo.businessId, promo.branchId);
+        return branch ? formatBranchLabel(branch) : undefined;
+      },
+    );
+    const { key, direction } = parsePromotionSort(appliedSort);
+    return sortPromotions(matched, key, direction);
+  }, [promotions, query, appliedSort, statusFilter, businesses, menuItems]);
 
   const selected =
     filtered.find((promo) => promo.id === selectedId) ?? filtered[0] ?? null;
@@ -342,10 +348,10 @@ export function PromotionsPanel({
         <SearchSortBar
           query={query}
           onQueryChange={setQuery}
-          sortLabel={sortDir === "desc" ? "Newest" : "Oldest"}
-          onToggleSort={() =>
-            setSortDir((value) => (value === "asc" ? "desc" : "asc"))
-          }
+          sortOptions={[...PROMOTION_SORT_OPTIONS]}
+          sortValue={draftSort}
+          onSortValueChange={setDraftSort}
+          onSort={() => setAppliedSort(draftSort)}
           placeholder="Search promotions…"
         />
         <button

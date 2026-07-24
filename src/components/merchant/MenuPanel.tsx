@@ -11,13 +11,18 @@ import type {
   BusinessProfile,
   MenuCategory,
   MenuItem,
-  SortDirection,
 } from "@/types/merchant";
 import {
   MENU_CATEGORIES,
   formatMenuCategory,
   formatMenuPrice,
 } from "@/types/merchant";
+import {
+  MENU_SORT_OPTIONS,
+  parseMenuSort,
+  searchMenuItems,
+  sortMenuItems,
+} from "@/lib/algorithms/merchant";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { SearchSortBar } from "./SearchSortBar";
 
@@ -45,7 +50,8 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
     businesses[0]?.id ?? "all",
   );
   const [query, setQuery] = useState("");
-  const [sortDir, setSortDir] = useState<SortDirection>("asc");
+  const [draftSort, setDraftSort] = useState<string>(MENU_SORT_OPTIONS[0].value);
+  const [appliedSort, setAppliedSort] = useState<string>(MENU_SORT_OPTIONS[0].value);
   const [availabilityFilter, setAvailabilityFilter] = useState<
     "all" | "available" | "unavailable"
   >("all");
@@ -71,8 +77,7 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
     businesses.find((business) => business.id === id)?.businessName ?? "Unknown";
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = menuItems.filter((item) => {
+    const scoped = menuItems.filter((item) => {
       const matchesBusiness =
         businessFilter === "all" ? true : item.businessId === businessFilter;
       const matchesAvailability =
@@ -81,25 +86,18 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
           : availabilityFilter === "available"
             ? item.isAvailable
             : !item.isAvailable;
-      const matchesQuery =
-        !q ||
-        item.itemName.toLowerCase().includes(q) ||
-        (item.description?.toLowerCase().includes(q) ?? false) ||
-        businessName(item.businessId).toLowerCase().includes(q) ||
-        formatMenuCategory(item.category).toLowerCase().includes(q);
-      return matchesBusiness && matchesAvailability && matchesQuery;
+      return matchesBusiness && matchesAvailability;
     });
 
-    return [...list].sort((a, b) => {
-      const cmp = a.itemName.localeCompare(b.itemName);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+    // Linear Search (partial text) → Insertion Sort by item name.
+    const matched = searchMenuItems(scoped, query, businessName);
+    return sortMenuItems(matched, parseMenuSort(appliedSort));
   }, [
     menuItems,
     businessFilter,
     availabilityFilter,
     query,
-    sortDir,
+    appliedSort,
     businesses,
   ]);
 
@@ -267,10 +265,10 @@ export function MenuPanel({ businesses, menuItems }: MenuPanelProps) {
         <SearchSortBar
           query={query}
           onQueryChange={setQuery}
-          sortLabel={sortDir === "asc" ? "A–Z" : "Z–A"}
-          onToggleSort={() =>
-            setSortDir((value) => (value === "asc" ? "desc" : "asc"))
-          }
+          sortOptions={[...MENU_SORT_OPTIONS]}
+          sortValue={draftSort}
+          onSortValueChange={setDraftSort}
+          onSort={() => setAppliedSort(draftSort)}
           placeholder="Search menu…"
         />
         <button

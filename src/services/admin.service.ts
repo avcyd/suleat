@@ -2,23 +2,33 @@
  * Admin service
  * -------------
  * Platform-wide reads/writes for users, companies (merchants), and posts (promotions).
- * List helpers are paginated for large datasets. Callers enforce ADMIN in the page/action layer.
+ *
+ * List helpers load a working set from the DB, then apply course algorithms
+ * (Linear Search + Merge Sort) before in-memory pagination — see src/lib/algorithms.
  */
 import { prisma } from "@/lib/prisma";
+import {
+  paginate,
+  parseAdminSort,
+  searchAdminCompanies,
+  searchAdminPosts,
+  searchAdminRequests,
+  searchAdminUsers,
+  sortAdminCompanies,
+  sortAdminPosts,
+  sortAdminRequests,
+  sortAdminUsers,
+} from "@/lib/algorithms/admin";
 import { ADMIN_PAGE_SIZE } from "@/types/admin";
 import type { UpdateUserRoleInput } from "@/validators/admin";
 import type { UserRole } from "../../generated/prisma/client";
 
+/** Safety cap so algorithm demos stay bounded on huge databases. */
+const ADMIN_ALGO_FETCH_CAP = 2000;
+
 function normalizePage(page?: number) {
   if (!page || !Number.isFinite(page) || page < 1) return 1;
   return Math.floor(page);
-}
-
-function parseSort(sort?: string): { field: string; dir: "asc" | "desc" } {
-  const raw = (sort ?? "").trim();
-  if (!raw) return { field: "", dir: "asc" };
-  if (raw.startsWith("-")) return { field: raw.slice(1), dir: "desc" };
-  return { field: raw, dir: "asc" };
 }
 
 export async function getAdminCounts() {
@@ -32,7 +42,7 @@ export async function getAdminCounts() {
   return { users, companies, posts, admins: 0, pendingRequests };
 }
 
-/** List users; search matches id (exact) or email (contains) only. */
+/** List users — Linear Search (id/email) + Merge Sort, then paginate. */
 export async function listUsersPage(opts?: {
   search?: string;
   page?: number;
@@ -41,40 +51,22 @@ export async function listUsersPage(opts?: {
 }) {
   const page = normalizePage(opts?.page);
   const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
-  const q = opts?.search?.trim();
-  const { field, dir } = parseSort(opts?.sort ?? "email");
+  const { field, direction } = parseAdminSort(opts?.sort ?? "email");
 
-  const where = q
-    ? {
-        OR: [{ id: q }, { email: { contains: q, mode: "insensitive" as const } }],
-      }
-    : undefined;
+  const rows = await prisma.user.findMany({
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+      role: true,
+      merchant: { select: { id: true, companyName: true } },
+    },
+    take: ADMIN_ALGO_FETCH_CAP,
+  });
 
-  const orderBy =
-    field === "role"
-      ? { role: dir }
-      : field === "displayName"
-        ? { displayName: dir }
-        : { email: dir };
-
-  const [items, total] = await Promise.all([
-    prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        displayName: true,
-        email: true,
-        role: true,
-        merchant: { select: { id: true, companyName: true } },
-      },
-      orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.user.count({ where }),
-  ]);
-
-  return { items, total, page, pageSize };
+  const matched = searchAdminUsers(rows, opts?.search ?? "");
+  const sorted = sortAdminUsers(matched, field || "email", direction);
+  return paginate(sorted, page, pageSize);
 }
 
 export async function getUserById(userId: string) {
@@ -140,7 +132,7 @@ export async function updateUserRole(
   });
 }
 
-/** Companies = Merchant profiles (lean list rows). */
+/** Companies = verified merchants — Linear Search + Merge Sort, then paginate. */
 export async function listCompaniesPage(opts?: {
   search?: string;
   page?: number;
@@ -149,55 +141,26 @@ export async function listCompaniesPage(opts?: {
 }) {
   const page = normalizePage(opts?.page);
   const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
-  const q = opts?.search?.trim();
-  const { field, dir } = parseSort(opts?.sort ?? "companyName");
+  const { field, direction } = parseAdminSort(opts?.sort ?? "companyName");
 
-  const where = {
-    verificationStatus: true,
-    ...(q
-      ? {
-          OR: [
-            { companyName: { contains: q, mode: "insensitive" as const } },
-            { taxId: { contains: q, mode: "insensitive" as const } },
-            { phoneNumber: { contains: q, mode: "insensitive" as const } },
-            { id: q },
-            {
-              user: {
-                OR: [
-                  { email: { contains: q, mode: "insensitive" as const } },
-                  {
-                    displayName: { contains: q, mode: "insensitive" as const },
-                  },
-                ],
-              },
-            },
-          ],
-        }
-      : {}),
-  };
-
-  const orderBy =
-    field === "businessCount"
-      ? { businesses: { _count: dir } }
-      : { companyName: dir };
-
-  const [items, total] = await Promise.all([
-    prisma.merchant.findMany({
-      where,
-      include: {
-        user: {
-          select: { id: true, email: true, displayName: true },
-        },
-        _count: { select: { businesses: true } },
+  const rows = await prisma.merchant.findMany({
+    where: { verificationStatus: true },
+    include: {
+      user: {
+        select: { id: true, email: true, displayName: true },
       },
-      orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.merchant.count({ where }),
-  ]);
+      _count: { select: { businesses: true } },
+    },
+    take: ADMIN_ALGO_FETCH_CAP,
+  });
 
-  return { items, total, page, pageSize };
+  const matched = searchAdminCompanies(rows, opts?.search ?? "");
+  const sorted = sortAdminCompanies(
+    matched,
+    field || "companyName",
+    direction,
+  );
+  return paginate(sorted, page, pageSize);
 }
 
 export async function getCompanyById(merchantId: string) {
@@ -301,7 +264,7 @@ export async function deleteBusiness(businessId: string) {
   });
 }
 
-/** Posts = Promotion records (lean list rows). */
+/** Posts = promotions — Linear Search + Merge Sort, then paginate. */
 export async function listPostsPage(opts?: {
   search?: string;
   page?: number;
@@ -310,70 +273,35 @@ export async function listPostsPage(opts?: {
 }) {
   const page = normalizePage(opts?.page);
   const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
-  const q = opts?.search?.trim();
-  const { field, dir } = parseSort(opts?.sort ?? "-createdAt");
+  const { field, direction } = parseAdminSort(opts?.sort ?? "-createdAt");
 
-  const where = q
-    ? {
-        OR: [
-          { id: q },
-          { caption: { contains: q, mode: "insensitive" as const } },
-          { description: { contains: q, mode: "insensitive" as const } },
-          {
-            business: {
-              OR: [
-                { businessName: { contains: q, mode: "insensitive" as const } },
-                {
-                  merchant: {
-                    companyName: { contains: q, mode: "insensitive" as const },
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      }
-    : undefined;
-
-  const orderBy =
-    field === "caption"
-      ? { caption: dir }
-      : field === "startDate"
-        ? { startDate: dir }
-        : field === "endDate"
-          ? { endDate: dir }
-          : { createdAt: dir };
-
-  const [items, total] = await Promise.all([
-    prisma.promotion.findMany({
-      where,
-      select: {
-        id: true,
-        caption: true,
-        promotionType: true,
-        discountPercent: true,
-        bundleType: true,
-        buyQuantity: true,
-        getQuantity: true,
-        bundleDiscountPercent: true,
-        startDate: true,
-        endDate: true,
-        createdAt: true,
-        business: {
-          select: {
-            businessName: true,
-            merchant: { select: { companyName: true } },
-          },
+  const rows = await prisma.promotion.findMany({
+    select: {
+      id: true,
+      caption: true,
+      description: true,
+      promotionType: true,
+      discountPercent: true,
+      bundleType: true,
+      buyQuantity: true,
+      getQuantity: true,
+      bundleDiscountPercent: true,
+      startDate: true,
+      endDate: true,
+      createdAt: true,
+      business: {
+        select: {
+          businessName: true,
+          merchant: { select: { companyName: true } },
         },
       },
-      orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.promotion.count({ where }),
-  ]);
+    },
+    take: ADMIN_ALGO_FETCH_CAP,
+  });
 
-  return { items, total, page, pageSize };
+  const matched = searchAdminPosts(rows, opts?.search ?? "");
+  const sorted = sortAdminPosts(matched, field || "createdAt", direction);
+  return paginate(sorted, page, pageSize);
 }
 
 export async function getPostById(postId: string) {
@@ -488,59 +416,27 @@ export async function listMerchantRequestsPage(opts?: {
 }) {
   const page = normalizePage(opts?.page);
   const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
-  const q = opts?.search?.trim();
-  const { field, dir } = parseSort(opts?.sort ?? "companyName");
+  const { field, direction } = parseAdminSort(opts?.sort ?? "-id");
 
-  const where = {
-    verificationStatus: false,
-    ...(q
-      ? {
-          OR: [
-            { companyName: { contains: q, mode: "insensitive" as const } },
-            { taxId: { contains: q, mode: "insensitive" as const } },
-            { phoneNumber: { contains: q, mode: "insensitive" as const } },
-            { id: q },
-            {
-              user: {
-                OR: [
-                  { email: { contains: q, mode: "insensitive" as const } },
-                  {
-                    displayName: { contains: q, mode: "insensitive" as const },
-                  },
-                ],
-              },
-            },
-          ],
-        }
-      : {}),
-  };
-
-  const orderBy =
-    field === "email"
-      ? { user: { email: dir } }
-      : { companyName: dir };
-
-  const [items, total] = await Promise.all([
-    prisma.merchant.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            displayName: true,
-            role: true,
-          },
+  const rows = await prisma.merchant.findMany({
+    where: { verificationStatus: false },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          role: true,
         },
       },
-      orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.merchant.count({ where }),
-  ]);
+    },
+    take: ADMIN_ALGO_FETCH_CAP,
+  });
 
-  return { items, total, page, pageSize };
+  // Linear Search (email / company) → Merge Sort (incl. newest/oldest via id).
+  const matched = searchAdminRequests(rows, opts?.search ?? "");
+  const sorted = sortAdminRequests(matched, field || "id", direction);
+  return paginate(sorted, page, pageSize);
 }
 
 /** Approve application: verify merchant + grant MERCHANT role. */

@@ -55,7 +55,7 @@ export function AdminSearchBar({
         type="submit"
         className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white hover:bg-[#1a2430]"
       >
-        Search
+        Sort
       </button>
       {defaultQuery ? (
         <Link

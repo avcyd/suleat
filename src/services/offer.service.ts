@@ -2,6 +2,9 @@
  * Public offer service
  * -------------------
  * Active promotions for the homepage and /offers (no auth required).
+ *
+ * End-user sorting is done in the database (ORDER BY) before `take`/pagination —
+ * practical for large catalogs vs in-memory Merge Sort on the full table.
  */
 import { prisma } from "@/lib/prisma";
 
@@ -35,7 +38,7 @@ function activeWhere(now = new Date()) {
   };
 }
 
-/** Latest active promotions for the homepage. */
+/** Latest active promotions for the homepage — DB sort by newest first. */
 export async function listLatestOffers(limit = 5) {
   return prisma.promotion.findMany({
     where: activeWhere(),
@@ -45,12 +48,18 @@ export async function listLatestOffers(limit = 5) {
   });
 }
 
-/** All active promotions for the offers browse page (capped for page load). */
+/**
+ * Active promotions for /offers.
+ * DB sorts by highest discount %, then newest — then caps with `take`.
+ */
 export async function listActiveOffers(limit = 80) {
   return prisma.promotion.findMany({
     where: activeWhere(),
     include: offerInclude,
-    orderBy: { createdAt: "desc" },
+    orderBy: [
+      { discountPercent: { sort: "desc", nulls: "last" } },
+      { createdAt: "desc" },
+    ],
     take: limit,
   });
 }

@@ -94,7 +94,7 @@ async function loadTabPayload(opts: {
     const result = await listMerchantRequestsPage({
       search: query || undefined,
       page,
-      sort: sort || "companyName",
+      sort: sort || "-id",
     });
     requests = {
       ...result,

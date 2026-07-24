@@ -76,15 +76,15 @@ export function AdminDashboard({
 
   const panel = (
     <>
-      {tab === "requests" && requests ? (
-        <RequestsPanel
-          result={requests}
-          query={query}
-          sort={sort || "companyName"}
-          listParams={listParams}
-          baseParams={searchBaseParams}
-        />
-      ) : null}
+          {tab === "requests" && requests ? (
+            <RequestsPanel
+              result={requests}
+              query={query}
+              sort={sort || "-id"}
+              listParams={listParams}
+              baseParams={searchBaseParams}
+            />
+          ) : null}
 
       {tab === "users" && users ? (
         <UsersPanel
