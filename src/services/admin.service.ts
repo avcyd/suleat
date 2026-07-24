@@ -3,33 +3,16 @@
  * -------------
  * Platform-wide reads/writes for users, companies (merchants), and posts (promotions).
  *
- * List helpers load a working set from the DB, then apply course algorithms
- * (Linear Search + Merge Sort) before in-memory pagination — see src/lib/algorithms.
+ * List helpers return a capped working set from the DB. Search / sort / pagination
+ * run in the browser (Linear Search + Merge Sort) for instant dashboard UX.
  */
 import { prisma } from "@/lib/prisma";
-import {
-  paginate,
-  parseAdminSort,
-  searchAdminCompanies,
-  searchAdminPosts,
-  searchAdminRequests,
-  searchAdminUsers,
-  sortAdminCompanies,
-  sortAdminPosts,
-  sortAdminRequests,
-  sortAdminUsers,
-} from "@/lib/algorithms/admin";
 import { ADMIN_PAGE_SIZE } from "@/types/admin";
 import type { UpdateUserRoleInput } from "@/validators/admin";
 import type { UserRole } from "../../generated/prisma/client";
 
 /** Safety cap so algorithm demos stay bounded on huge databases. */
 const ADMIN_ALGO_FETCH_CAP = 2000;
-
-function normalizePage(page?: number) {
-  if (!page || !Number.isFinite(page) || page < 1) return 1;
-  return Math.floor(page);
-}
 
 export async function getAdminCounts() {
   // Only counts shown in the dashboard chrome (skip unused admin-role count).
@@ -42,18 +25,9 @@ export async function getAdminCounts() {
   return { users, companies, posts, admins: 0, pendingRequests };
 }
 
-/** List users — Linear Search (id/email) + Merge Sort, then paginate. */
-export async function listUsersPage(opts?: {
-  search?: string;
-  page?: number;
-  sort?: string;
-  pageSize?: number;
-}) {
-  const page = normalizePage(opts?.page);
-  const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
-  const { field, direction } = parseAdminSort(opts?.sort ?? "email");
-
-  const rows = await prisma.user.findMany({
+/** Full user working set for client-side Linear Search + Merge Sort. */
+export async function listUsersWorkingSet() {
+  return prisma.user.findMany({
     select: {
       id: true,
       displayName: true,
@@ -63,10 +37,25 @@ export async function listUsersPage(opts?: {
     },
     take: ADMIN_ALGO_FETCH_CAP,
   });
+}
 
-  const matched = searchAdminUsers(rows, opts?.search ?? "");
-  const sorted = sortAdminUsers(matched, field || "email", direction);
-  return paginate(sorted, page, pageSize);
+/** @deprecated Prefer listUsersWorkingSet + client algorithms. */
+export async function listUsersPage(opts?: {
+  search?: string;
+  page?: number;
+  sort?: string;
+  pageSize?: number;
+}) {
+  const page = !opts?.page || opts.page < 1 ? 1 : Math.floor(opts.page);
+  const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
+  const rows = await listUsersWorkingSet();
+  const start = (page - 1) * pageSize;
+  return {
+    items: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  };
 }
 
 export async function getUserById(userId: string) {
@@ -132,18 +121,9 @@ export async function updateUserRole(
   });
 }
 
-/** Companies = verified merchants — Linear Search + Merge Sort, then paginate. */
-export async function listCompaniesPage(opts?: {
-  search?: string;
-  page?: number;
-  sort?: string;
-  pageSize?: number;
-}) {
-  const page = normalizePage(opts?.page);
-  const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
-  const { field, direction } = parseAdminSort(opts?.sort ?? "companyName");
-
-  const rows = await prisma.merchant.findMany({
+/** Verified companies working set for client-side search/sort. */
+export async function listCompaniesWorkingSet() {
+  return prisma.merchant.findMany({
     where: { verificationStatus: true },
     include: {
       user: {
@@ -153,14 +133,23 @@ export async function listCompaniesPage(opts?: {
     },
     take: ADMIN_ALGO_FETCH_CAP,
   });
+}
 
-  const matched = searchAdminCompanies(rows, opts?.search ?? "");
-  const sorted = sortAdminCompanies(
-    matched,
-    field || "companyName",
-    direction,
-  );
-  return paginate(sorted, page, pageSize);
+/** @deprecated Prefer listCompaniesWorkingSet + client algorithms. */
+export async function listCompaniesPage(opts?: {
+  page?: number;
+  pageSize?: number;
+}) {
+  const page = !opts?.page || opts.page < 1 ? 1 : Math.floor(opts.page);
+  const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
+  const rows = await listCompaniesWorkingSet();
+  const start = (page - 1) * pageSize;
+  return {
+    items: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  };
 }
 
 export async function getCompanyById(merchantId: string) {
@@ -264,18 +253,9 @@ export async function deleteBusiness(businessId: string) {
   });
 }
 
-/** Posts = promotions — Linear Search + Merge Sort, then paginate. */
-export async function listPostsPage(opts?: {
-  search?: string;
-  page?: number;
-  sort?: string;
-  pageSize?: number;
-}) {
-  const page = normalizePage(opts?.page);
-  const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
-  const { field, direction } = parseAdminSort(opts?.sort ?? "-createdAt");
-
-  const rows = await prisma.promotion.findMany({
+/** Posts working set for client-side search/sort. */
+export async function listPostsWorkingSet() {
+  return prisma.promotion.findMany({
     select: {
       id: true,
       caption: true,
@@ -298,10 +278,23 @@ export async function listPostsPage(opts?: {
     },
     take: ADMIN_ALGO_FETCH_CAP,
   });
+}
 
-  const matched = searchAdminPosts(rows, opts?.search ?? "");
-  const sorted = sortAdminPosts(matched, field || "createdAt", direction);
-  return paginate(sorted, page, pageSize);
+/** @deprecated Prefer listPostsWorkingSet + client algorithms. */
+export async function listPostsPage(opts?: {
+  page?: number;
+  pageSize?: number;
+}) {
+  const page = !opts?.page || opts.page < 1 ? 1 : Math.floor(opts.page);
+  const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
+  const rows = await listPostsWorkingSet();
+  const start = (page - 1) * pageSize;
+  return {
+    items: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  };
 }
 
 export async function getPostById(postId: string) {
@@ -407,18 +400,9 @@ export async function deleteCompany(merchantId: string) {
   });
 }
 
-/** Pending merchant applications (verificationStatus = false). */
-export async function listMerchantRequestsPage(opts?: {
-  search?: string;
-  page?: number;
-  sort?: string;
-  pageSize?: number;
-}) {
-  const page = normalizePage(opts?.page);
-  const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
-  const { field, direction } = parseAdminSort(opts?.sort ?? "-id");
-
-  const rows = await prisma.merchant.findMany({
+/** Pending applications working set for client-side search/sort. */
+export async function listMerchantRequestsWorkingSet() {
+  return prisma.merchant.findMany({
     where: { verificationStatus: false },
     include: {
       user: {
@@ -432,11 +416,23 @@ export async function listMerchantRequestsPage(opts?: {
     },
     take: ADMIN_ALGO_FETCH_CAP,
   });
+}
 
-  // Linear Search (email / company) → Merge Sort (incl. newest/oldest via id).
-  const matched = searchAdminRequests(rows, opts?.search ?? "");
-  const sorted = sortAdminRequests(matched, field || "id", direction);
-  return paginate(sorted, page, pageSize);
+/** @deprecated Prefer listMerchantRequestsWorkingSet + client algorithms. */
+export async function listMerchantRequestsPage(opts?: {
+  page?: number;
+  pageSize?: number;
+}) {
+  const page = !opts?.page || opts.page < 1 ? 1 : Math.floor(opts.page);
+  const pageSize = opts?.pageSize ?? ADMIN_PAGE_SIZE;
+  const rows = await listMerchantRequestsWorkingSet();
+  const start = (page - 1) * pageSize;
+  return {
+    items: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  };
 }
 
 /** Approve application: verify merchant + grant MERCHANT role. */

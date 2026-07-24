@@ -1,39 +1,59 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import {
+  paginate,
+  parseAdminSort,
+  searchAdminPostList,
+  sortAdminPostList,
+} from "@/lib/algorithms/admin";
 import { adminDashboardHref } from "@/lib/admin-href";
-import type { AdminPageResult, AdminPostListItem } from "@/types/admin";
+import { ADMIN_PAGE_SIZE, type AdminPostListItem } from "@/types/admin";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { Pagination } from "./Pagination";
 
 type PostsPanelProps = {
-  result: AdminPageResult<AdminPostListItem>;
-  query: string;
-  sort: string;
+  items: AdminPostListItem[];
   listParams: Record<string, string | undefined>;
-  baseParams: Record<string, string | undefined>;
 };
 
-export function PostsPanel({
-  result,
-  query,
-  sort,
-  listParams,
-  baseParams,
-}: PostsPanelProps) {
+const SORT_OPTIONS = [
+  { value: "-createdAt", label: "Newest" },
+  { value: "createdAt", label: "Oldest" },
+  { value: "caption", label: "Caption A–Z" },
+  { value: "-caption", label: "Caption Z–A" },
+  { value: "-startDate", label: "Start date" },
+  { value: "-endDate", label: "End date" },
+];
+
+export function PostsPanel({ items, listParams }: PostsPanelProps) {
+  const [query, setQuery] = useState("");
+  const [draftSort, setDraftSort] = useState("-createdAt");
+  const [appliedSort, setAppliedSort] = useState("-createdAt");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, appliedSort, items]);
+
+  const result = useMemo(() => {
+    const { field, direction } = parseAdminSort(appliedSort);
+    const matched = searchAdminPostList(items, query);
+    const sorted = sortAdminPostList(matched, field || "createdAt", direction);
+    return paginate(sorted, page, ADMIN_PAGE_SIZE);
+  }, [items, query, appliedSort, page]);
+
   return (
     <div>
       <AdminSearchBar
-        defaultQuery={query}
+        query={query}
+        onQueryChange={setQuery}
         placeholder="Search posts..."
-        baseParams={baseParams}
-        currentSort={sort}
-        sortOptions={[
-          { value: "-createdAt", label: "Newest" },
-          { value: "createdAt", label: "Oldest" },
-          { value: "caption", label: "Caption A–Z" },
-          { value: "-caption", label: "Caption Z–A" },
-          { value: "-startDate", label: "Start date" },
-          { value: "-endDate", label: "End date" },
-        ]}
+        sortOptions={SORT_OPTIONS}
+        sortValue={draftSort}
+        onSortValueChange={setDraftSort}
+        onSort={() => setAppliedSort(draftSort)}
       />
 
       <div className="overflow-x-auto">
@@ -99,7 +119,7 @@ export function PostsPanel({
         page={result.page}
         pageSize={result.pageSize}
         total={result.total}
-        listParams={listParams}
+        onPageChange={setPage}
       />
     </div>
   );

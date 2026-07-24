@@ -1,8 +1,8 @@
 /**
  * /admin/dashboard
  * ----------------
- * ADMIN-only platform dashboard: requests, users, companies, posts.
- * Counts + active tab load in parallel; detail drawers parallelized with lists.
+ * ADMIN-only platform dashboard.
+ * Server loads each tab's working set once; search/sort/paginate run in the browser.
  */
 import { redirect } from "next/navigation";
 import { AdminDashboard } from "@/components/admin";
@@ -23,17 +23,21 @@ import {
   getCompanyById,
   getPostById,
   getUserById,
-  listCompaniesPage,
-  listMerchantRequestsPage,
-  listPostsPage,
-  listUsersPage,
+  listCompaniesWorkingSet,
+  listMerchantRequestsWorkingSet,
+  listPostsWorkingSet,
+  listUsersWorkingSet,
 } from "@/services/admin.service";
 import type {
   AdminBusinessDetail,
   AdminCompanyDetail,
+  AdminCompanyListItem,
+  AdminMerchantRequest,
   AdminPostDetail,
+  AdminPostListItem,
   AdminTab,
   AdminUserDetail,
+  AdminUserListItem,
 } from "@/types/admin";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -54,12 +58,6 @@ function parseTab(raw: string | undefined): AdminTab {
   return "requests";
 }
 
-function parsePage(raw: string | undefined) {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1) return 1;
-  return Math.floor(n);
-}
-
 async function safeMap<T>(promise: Promise<T>): Promise<T | null> {
   try {
     return await promise;
@@ -70,66 +68,40 @@ async function safeMap<T>(promise: Promise<T>): Promise<T | null> {
 
 async function loadTabPayload(opts: {
   tab: AdminTab;
-  query: string;
-  sort: string;
-  page: number;
   userId?: string;
   companyId?: string;
   businessId?: string;
   postId?: string;
 }) {
-  const { tab, query, sort, page, userId, companyId, businessId, postId } =
-    opts;
+  const { tab, userId, companyId, businessId, postId } = opts;
 
-  let users;
-  let companies;
-  let posts;
-  let requests;
+  let users: AdminUserListItem[] | undefined;
+  let companies: AdminCompanyListItem[] | undefined;
+  let posts: AdminPostListItem[] | undefined;
+  let requests: AdminMerchantRequest[] | undefined;
   let selectedUser: AdminUserDetail | null = null;
   let selectedCompany: AdminCompanyDetail | null = null;
   let selectedBusiness: AdminBusinessDetail | null = null;
   let selectedPost: AdminPostDetail | null = null;
 
   if (tab === "requests") {
-    const result = await listMerchantRequestsPage({
-      search: query || undefined,
-      page,
-      sort: sort || "-id",
-    });
-    requests = {
-      ...result,
-      items: result.items.map(mapAdminMerchantRequest),
-    };
+    const rows = await listMerchantRequestsWorkingSet();
+    requests = rows.map(mapAdminMerchantRequest);
   } else if (tab === "users") {
-    const [result, userRow] = await Promise.all([
-      listUsersPage({
-        search: query || undefined,
-        page,
-        sort: sort || "email",
-      }),
+    const [rows, userRow] = await Promise.all([
+      listUsersWorkingSet(),
       userId ? safeMap(getUserById(userId)) : Promise.resolve(null),
     ]);
-    users = {
-      ...result,
-      items: result.items.map(mapAdminUserListItem),
-    };
+    users = rows.map(mapAdminUserListItem);
     selectedUser = userRow ? mapAdminUserDetail(userRow) : null;
   } else if (tab === "companies") {
-    const [result, companyRow, businessRow] = await Promise.all([
-      listCompaniesPage({
-        search: query || undefined,
-        page,
-        sort: sort || "companyName",
-      }),
+    const [rows, companyRow, businessRow] = await Promise.all([
+      listCompaniesWorkingSet(),
       companyId ? safeMap(getCompanyById(companyId)) : Promise.resolve(null),
       businessId ? safeMap(getBusinessById(businessId)) : Promise.resolve(null),
     ]);
 
-    companies = {
-      ...result,
-      items: result.items.map(mapAdminCompanyListItem),
-    };
-
+    companies = rows.map(mapAdminCompanyListItem);
     selectedCompany = companyRow ? mapAdminCompanyDetail(companyRow) : null;
     selectedBusiness = businessRow
       ? mapAdminBusinessDetail(businessRow)
@@ -149,18 +121,11 @@ async function loadTabPayload(opts: {
       }
     }
   } else {
-    const [result, postRow] = await Promise.all([
-      listPostsPage({
-        search: query || undefined,
-        page,
-        sort: sort || "-createdAt",
-      }),
+    const [rows, postRow] = await Promise.all([
+      listPostsWorkingSet(),
       postId ? safeMap(getPostById(postId)) : Promise.resolve(null),
     ]);
-    posts = {
-      ...result,
-      items: result.items.map(mapAdminPostListItem),
-    };
+    posts = rows.map(mapAdminPostListItem);
     selectedPost = postRow ? mapAdminPostDetail(postRow) : null;
   }
 
@@ -193,9 +158,6 @@ export default async function AdminDashboardPage({
 
   const params = await searchParams;
   const tab = parseTab(first(params.tab));
-  const query = (first(params.q) ?? "").trim();
-  const sort = (first(params.sort) ?? "").trim();
-  const page = parsePage(first(params.page));
   const userId = first(params.userId);
   const companyId = first(params.companyId);
   const businessId = first(params.businessId);
@@ -205,9 +167,6 @@ export default async function AdminDashboardPage({
     getCachedAdminCounts(),
     loadTabPayload({
       tab,
-      query,
-      sort,
-      page,
       userId,
       companyId,
       businessId,
@@ -218,9 +177,6 @@ export default async function AdminDashboardPage({
   return (
     <AdminDashboard
       tab={tab}
-      query={query}
-      sort={sort}
-      page={page}
       counts={counts}
       users={tabPayload.users}
       companies={tabPayload.companies}

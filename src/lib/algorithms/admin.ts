@@ -1,6 +1,6 @@
 /**
- * Admin dashboard — Linear Search + Merge Sort wrappers.
- * Imports algorithms from dedicated files under this folder.
+ * Admin dashboard — Linear Search + Merge Sort (view-model / client-safe).
+ * Panels import these and run them in the browser for instant Sort.
  */
 import { linearSearch } from "./linear-search";
 import { mergeSort } from "./merge-sort";
@@ -11,6 +11,12 @@ import {
   paginate,
 } from "./helpers";
 import { normalizeQuery, type SortDirection } from "./types";
+import type {
+  AdminCompanyListItem,
+  AdminMerchantRequest,
+  AdminPostListItem,
+  AdminUserListItem,
+} from "@/types/admin";
 
 export function parseAdminSort(sort?: string): {
   field: string;
@@ -24,9 +30,10 @@ export function parseAdminSort(sort?: string): {
   return { field: raw, direction: "asc" };
 }
 
-export function searchAdminUsers<
-  T extends { id: string; email: string; displayName: string },
->(items: readonly T[], query: string): T[] {
+export function searchAdminUserList(
+  items: readonly AdminUserListItem[],
+  query: string,
+): AdminUserListItem[] {
   const q = normalizeQuery(query);
   if (!q) return [...items];
 
@@ -34,14 +41,17 @@ export function searchAdminUsers<
     if (user.id.toLowerCase() === q) return true;
     return (
       user.email.toLowerCase().includes(q) ||
-      user.displayName.toLowerCase().includes(q)
+      user.displayName.toLowerCase().includes(q) ||
+      (user.companyName?.toLowerCase().includes(q) ?? false)
     );
   });
 }
 
-export function sortAdminUsers<
-  T extends { email: string; displayName: string; role: string },
->(items: readonly T[], field: string, direction: SortDirection): T[] {
+export function sortAdminUserList(
+  items: readonly AdminUserListItem[],
+  field: string,
+  direction: SortDirection,
+): AdminUserListItem[] {
   if (field === "displayName") {
     return mergeSort(items, (a, b) =>
       compareStrings(a.displayName, b.displayName, direction),
@@ -57,15 +67,10 @@ export function sortAdminUsers<
   );
 }
 
-export function searchAdminCompanies<
-  T extends {
-    id: string;
-    companyName: string;
-    taxId: string;
-    phoneNumber: string;
-    user: { email: string; displayName: string };
-  },
->(items: readonly T[], query: string): T[] {
+export function searchAdminCompanyList(
+  items: readonly AdminCompanyListItem[],
+  query: string,
+): AdminCompanyListItem[] {
   const q = normalizeQuery(query);
   if (!q) return [...items];
 
@@ -75,18 +80,20 @@ export function searchAdminCompanies<
       company.companyName.toLowerCase().includes(q) ||
       company.taxId.toLowerCase().includes(q) ||
       company.phoneNumber.toLowerCase().includes(q) ||
-      company.user.email.toLowerCase().includes(q) ||
-      company.user.displayName.toLowerCase().includes(q)
+      company.ownerEmail.toLowerCase().includes(q) ||
+      company.ownerName.toLowerCase().includes(q)
     );
   });
 }
 
-export function sortAdminCompanies<
-  T extends { companyName: string; _count: { businesses: number } },
->(items: readonly T[], field: string, direction: SortDirection): T[] {
+export function sortAdminCompanyList(
+  items: readonly AdminCompanyListItem[],
+  field: string,
+  direction: SortDirection,
+): AdminCompanyListItem[] {
   if (field === "businessCount") {
     return mergeSort(items, (a, b) =>
-      compareNumbers(a._count.businesses, b._count.businesses, direction),
+      compareNumbers(a.businessCount, b.businessCount, direction),
     );
   }
   return mergeSort(items, (a, b) =>
@@ -94,28 +101,35 @@ export function sortAdminCompanies<
   );
 }
 
-export function searchAdminRequests<
-  T extends {
-    id: string;
-    companyName: string;
-    taxId: string;
-    phoneNumber: string;
-    user: { email: string; displayName: string };
-  },
->(items: readonly T[], query: string): T[] {
-  // Same partial-match Linear Search as companies (email + company name).
-  return searchAdminCompanies(items, query);
+export function searchAdminRequestList(
+  items: readonly AdminMerchantRequest[],
+  query: string,
+): AdminMerchantRequest[] {
+  const q = normalizeQuery(query);
+  if (!q) return [...items];
+
+  return linearSearch(items, (request) => {
+    if (request.id.toLowerCase() === q) return true;
+    return (
+      request.companyName.toLowerCase().includes(q) ||
+      request.taxId.toLowerCase().includes(q) ||
+      request.phoneNumber.toLowerCase().includes(q) ||
+      request.ownerEmail.toLowerCase().includes(q) ||
+      request.ownerName.toLowerCase().includes(q)
+    );
+  });
 }
 
-export function sortAdminRequests<
-  T extends { id: string; companyName: string; user: { email: string } },
->(items: readonly T[], field: string, direction: SortDirection): T[] {
+export function sortAdminRequestList(
+  items: readonly AdminMerchantRequest[],
+  field: string,
+  direction: SortDirection,
+): AdminMerchantRequest[] {
   if (field === "email") {
     return mergeSort(items, (a, b) =>
-      compareStrings(a.user.email, b.user.email, direction),
+      compareStrings(a.ownerEmail, b.ownerEmail, direction),
     );
   }
-  // id ≈ chronological for CUID primary keys (newest / oldest applications)
   if (field === "id") {
     return mergeSort(items, (a, b) =>
       compareStrings(a.id, b.id, direction),
@@ -126,17 +140,10 @@ export function sortAdminRequests<
   );
 }
 
-export function searchAdminPosts<
-  T extends {
-    id: string;
-    caption: string;
-    description?: string | null;
-    business: {
-      businessName: string;
-      merchant: { companyName: string };
-    };
-  },
->(items: readonly T[], query: string): T[] {
+export function searchAdminPostList(
+  items: readonly AdminPostListItem[],
+  query: string,
+): AdminPostListItem[] {
   const q = normalizeQuery(query);
   if (!q) return [...items];
 
@@ -144,21 +151,18 @@ export function searchAdminPosts<
     if (post.id.toLowerCase() === q) return true;
     return (
       post.caption.toLowerCase().includes(q) ||
-      (post.description ?? "").toLowerCase().includes(q) ||
-      post.business.businessName.toLowerCase().includes(q) ||
-      post.business.merchant.companyName.toLowerCase().includes(q)
+      post.dealLabel.toLowerCase().includes(q) ||
+      post.businessName.toLowerCase().includes(q) ||
+      post.companyName.toLowerCase().includes(q)
     );
   });
 }
 
-export function sortAdminPosts<
-  T extends {
-    caption: string;
-    startDate: Date | string;
-    endDate: Date | string;
-    createdAt: Date | string;
-  },
->(items: readonly T[], field: string, direction: SortDirection): T[] {
+export function sortAdminPostList(
+  items: readonly AdminPostListItem[],
+  field: string,
+  direction: SortDirection,
+): AdminPostListItem[] {
   if (field === "caption") {
     return mergeSort(items, (a, b) =>
       compareStrings(a.caption, b.caption, direction),

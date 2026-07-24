@@ -1,37 +1,61 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import {
+  paginate,
+  parseAdminSort,
+  searchAdminCompanyList,
+  sortAdminCompanyList,
+} from "@/lib/algorithms/admin";
 import { adminDashboardHref } from "@/lib/admin-href";
-import type { AdminCompanyListItem, AdminPageResult } from "@/types/admin";
+import { ADMIN_PAGE_SIZE, type AdminCompanyListItem } from "@/types/admin";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { Pagination } from "./Pagination";
 
 type CompaniesPanelProps = {
-  result: AdminPageResult<AdminCompanyListItem>;
-  query: string;
-  sort: string;
+  items: AdminCompanyListItem[];
   listParams: Record<string, string | undefined>;
-  baseParams: Record<string, string | undefined>;
 };
 
-export function CompaniesPanel({
-  result,
-  query,
-  sort,
-  listParams,
-  baseParams,
-}: CompaniesPanelProps) {
+const SORT_OPTIONS = [
+  { value: "companyName", label: "Name A–Z" },
+  { value: "-companyName", label: "Name Z–A" },
+  { value: "-businessCount", label: "Most businesses" },
+  { value: "businessCount", label: "Fewest businesses" },
+];
+
+export function CompaniesPanel({ items, listParams }: CompaniesPanelProps) {
+  const [query, setQuery] = useState("");
+  const [draftSort, setDraftSort] = useState("companyName");
+  const [appliedSort, setAppliedSort] = useState("companyName");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, appliedSort, items]);
+
+  const result = useMemo(() => {
+    const { field, direction } = parseAdminSort(appliedSort);
+    const matched = searchAdminCompanyList(items, query);
+    const sorted = sortAdminCompanyList(
+      matched,
+      field || "companyName",
+      direction,
+    );
+    return paginate(sorted, page, ADMIN_PAGE_SIZE);
+  }, [items, query, appliedSort, page]);
+
   return (
     <div>
       <AdminSearchBar
-        defaultQuery={query}
+        query={query}
+        onQueryChange={setQuery}
         placeholder="Search companies..."
-        baseParams={baseParams}
-        currentSort={sort}
-        sortOptions={[
-          { value: "companyName", label: "Name A–Z" },
-          { value: "-companyName", label: "Name Z–A" },
-          { value: "-businessCount", label: "Most businesses" },
-          { value: "businessCount", label: "Fewest businesses" },
-        ]}
+        sortOptions={SORT_OPTIONS}
+        sortValue={draftSort}
+        onSortValueChange={setDraftSort}
+        onSort={() => setAppliedSort(draftSort)}
       />
 
       <div className="overflow-x-auto">
@@ -102,7 +126,7 @@ export function CompaniesPanel({
         page={result.page}
         pageSize={result.pageSize}
         total={result.total}
-        listParams={listParams}
+        onPageChange={setPage}
       />
     </div>
   );

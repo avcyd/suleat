@@ -1,39 +1,59 @@
-import Link from "next/link";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  paginate,
+  parseAdminSort,
+  searchAdminUserList,
+  sortAdminUserList,
+} from "@/lib/algorithms/admin";
+import { ADMIN_PAGE_SIZE, type AdminUserListItem } from "@/types/admin";
 import { adminDashboardHref } from "@/lib/admin-href";
-import type { AdminPageResult, AdminUserListItem } from "@/types/admin";
+import Link from "next/link";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { Pagination } from "./Pagination";
 
 type UsersPanelProps = {
-  result: AdminPageResult<AdminUserListItem>;
-  query: string;
-  sort: string;
+  items: AdminUserListItem[];
   listParams: Record<string, string | undefined>;
-  baseParams: Record<string, string | undefined>;
 };
 
-export function UsersPanel({
-  result,
-  query,
-  sort,
-  listParams,
-  baseParams,
-}: UsersPanelProps) {
+const SORT_OPTIONS = [
+  { value: "email", label: "Email A–Z" },
+  { value: "-email", label: "Email Z–A" },
+  { value: "displayName", label: "Name A–Z" },
+  { value: "-displayName", label: "Name Z–A" },
+  { value: "role", label: "Role A–Z" },
+  { value: "-role", label: "Role Z–A" },
+];
+
+export function UsersPanel({ items, listParams }: UsersPanelProps) {
+  const [query, setQuery] = useState("");
+  const [draftSort, setDraftSort] = useState("email");
+  const [appliedSort, setAppliedSort] = useState("email");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, appliedSort, items]);
+
+  const result = useMemo(() => {
+    const { field, direction } = parseAdminSort(appliedSort);
+    const matched = searchAdminUserList(items, query);
+    const sorted = sortAdminUserList(matched, field || "email", direction);
+    return paginate(sorted, page, ADMIN_PAGE_SIZE);
+  }, [items, query, appliedSort, page]);
+
   return (
     <div>
       <AdminSearchBar
-        defaultQuery={query}
+        query={query}
+        onQueryChange={setQuery}
         placeholder="Search by ID or email..."
-        baseParams={baseParams}
-        currentSort={sort}
-        sortOptions={[
-          { value: "email", label: "Email A–Z" },
-          { value: "-email", label: "Email Z–A" },
-          { value: "displayName", label: "Name A–Z" },
-          { value: "-displayName", label: "Name Z–A" },
-          { value: "role", label: "Role A–Z" },
-          { value: "-role", label: "Role Z–A" },
-        ]}
+        sortOptions={SORT_OPTIONS}
+        sortValue={draftSort}
+        onSortValueChange={setDraftSort}
+        onSort={() => setAppliedSort(draftSort)}
       />
 
       <div className="overflow-x-auto">
@@ -97,7 +117,7 @@ export function UsersPanel({
         page={result.page}
         pageSize={result.pageSize}
         total={result.total}
-        listParams={listParams}
+        onPageChange={setPage}
       />
     </div>
   );

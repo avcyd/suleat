@@ -1,22 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   approveMerchantRequestAction,
   rejectMerchantRequestAction,
 } from "@/actions/admin";
 import { ConfirmDialog } from "@/components/merchant/ConfirmDialog";
-import type { AdminMerchantRequest, AdminPageResult } from "@/types/admin";
+import {
+  paginate,
+  parseAdminSort,
+  searchAdminRequestList,
+  sortAdminRequestList,
+} from "@/lib/algorithms/admin";
+import { ADMIN_PAGE_SIZE, type AdminMerchantRequest } from "@/types/admin";
 import { AdminSearchBar } from "./AdminSearchBar";
 import { Pagination } from "./Pagination";
 
 type RequestsPanelProps = {
-  result: AdminPageResult<AdminMerchantRequest>;
-  query: string;
-  sort: string;
-  listParams: Record<string, string | undefined>;
-  baseParams: Record<string, string | undefined>;
+  items: AdminMerchantRequest[];
 };
 
 type PendingAction =
@@ -24,31 +26,50 @@ type PendingAction =
   | { type: "reject"; id: string; name: string }
   | null;
 
+const SORT_OPTIONS = [
+  { value: "-id", label: "Newest" },
+  { value: "id", label: "Oldest" },
+  { value: "companyName", label: "Company A–Z" },
+  { value: "-companyName", label: "Company Z–A" },
+  { value: "email", label: "Email A–Z" },
+  { value: "-email", label: "Email Z–A" },
+];
+
 /**
  * Merchant role requests — approve grants MERCHANT; reject removes the application.
+ * Search / sort / paginate run client-side (Linear Search + Merge Sort).
  */
-export function RequestsPanel({
-  result,
-  query,
-  sort,
-  listParams,
-  baseParams,
-}: RequestsPanelProps) {
+export function RequestsPanel({ items }: RequestsPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [action, setAction] = useState<PendingAction>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [draftSort, setDraftSort] = useState("-id");
+  const [appliedSort, setAppliedSort] = useState("-id");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, appliedSort, items]);
+
+  const result = useMemo(() => {
+    const { field, direction } = parseAdminSort(appliedSort);
+    const matched = searchAdminRequestList(items, query);
+    const sorted = sortAdminRequestList(matched, field || "id", direction);
+    return paginate(sorted, page, ADMIN_PAGE_SIZE);
+  }, [items, query, appliedSort, page]);
 
   function confirmAction() {
     if (!action) return;
     setError(null);
     startTransition(async () => {
-      const result =
+      const outcome =
         action.type === "approve"
           ? await approveMerchantRequestAction(action.id)
           : await rejectMerchantRequestAction(action.id);
-      if (!result.ok) {
-        setError(result.message);
+      if (!outcome.ok) {
+        setError(outcome.message);
         setAction(null);
         return;
       }
@@ -63,18 +84,13 @@ export function RequestsPanel({
     <>
       <div>
         <AdminSearchBar
-          defaultQuery={query}
+          query={query}
+          onQueryChange={setQuery}
           placeholder="Search applications..."
-          baseParams={baseParams}
-          currentSort={sort}
-          sortOptions={[
-            { value: "-id", label: "Newest" },
-            { value: "id", label: "Oldest" },
-            { value: "companyName", label: "Company A–Z" },
-            { value: "-companyName", label: "Company Z–A" },
-            { value: "email", label: "Email A–Z" },
-            { value: "-email", label: "Email Z–A" },
-          ]}
+          sortOptions={SORT_OPTIONS}
+          sortValue={draftSort}
+          onSortValueChange={setDraftSort}
+          onSort={() => setAppliedSort(draftSort)}
         />
 
         {error ? (
@@ -168,7 +184,7 @@ export function RequestsPanel({
           page={result.page}
           pageSize={result.pageSize}
           total={result.total}
-          listParams={listParams}
+          onPageChange={setPage}
         />
       </div>
 

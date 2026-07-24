@@ -11,4 +11,6 @@ Each algorithm lives in its **own file** with step-by-step comments:
 | `types.ts` | Shared types |
 | `merchant.ts` / `admin.ts` | Dashboard wrappers that **import** the algorithms above |
 
-Public end-user offers use **database `ORDER BY`** before `LIMIT` (`src/services/offer.service.ts`).
+**Merchant + admin dashboards:** data is loaded once, then Linear Search / Insertion / Merge Sort run **in the browser** so Sort feels instant.
+
+**Public offers:** database `ORDER BY` before `LIMIT` (`src/services/offer.service.ts`).

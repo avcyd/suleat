@@ -5,7 +5,6 @@ import type {
   AdminCompanyListItem,
   AdminCounts,
   AdminMerchantRequest,
-  AdminPageResult,
   AdminPostDetail,
   AdminPostListItem,
   AdminTab,
@@ -24,14 +23,11 @@ import { adminDashboardHref } from "@/lib/admin-href";
 
 type AdminDashboardProps = {
   tab: AdminTab;
-  query: string;
-  sort: string;
-  page: number;
   counts: AdminCounts;
-  users?: AdminPageResult<AdminUserListItem>;
-  companies?: AdminPageResult<AdminCompanyListItem>;
-  posts?: AdminPageResult<AdminPostListItem>;
-  requests?: AdminPageResult<AdminMerchantRequest>;
+  users?: AdminUserListItem[];
+  companies?: AdminCompanyListItem[];
+  posts?: AdminPostListItem[];
+  requests?: AdminMerchantRequest[];
   selectedUser: AdminUserDetail | null;
   selectedCompany: AdminCompanyDetail | null;
   selectedBusiness: AdminBusinessDetail | null;
@@ -39,13 +35,10 @@ type AdminDashboardProps = {
 };
 
 /**
- * Administrator Dashboard — paginated tables + detail drawers.
+ * Administrator Dashboard — working set from server; search/sort/page in browser.
  */
 export function AdminDashboard({
   tab,
-  query,
-  sort,
-  page,
   counts,
   users,
   companies,
@@ -56,12 +49,7 @@ export function AdminDashboard({
   selectedBusiness,
   selectedPost,
 }: AdminDashboardProps) {
-  const listParams = {
-    tab,
-    q: query || undefined,
-    sort: sort || undefined,
-    page: String(page),
-  };
+  const listParams = { tab };
 
   const closeHref = adminDashboardHref(listParams);
   const companyCloseHref = adminDashboardHref({
@@ -69,51 +57,22 @@ export function AdminDashboard({
     companyId: selectedCompany?.id,
   });
 
-  const searchBaseParams = {
-    tab,
-    sort: sort || undefined,
-  };
-
   const panel = (
     <>
-          {tab === "requests" && requests ? (
-            <RequestsPanel
-              result={requests}
-              query={query}
-              sort={sort || "-id"}
-              listParams={listParams}
-              baseParams={searchBaseParams}
-            />
-          ) : null}
+      {tab === "requests" && requests ? (
+        <RequestsPanel items={requests} />
+      ) : null}
 
       {tab === "users" && users ? (
-        <UsersPanel
-          result={users}
-          query={query}
-          sort={sort || "email"}
-          listParams={listParams}
-          baseParams={searchBaseParams}
-        />
+        <UsersPanel items={users} listParams={listParams} />
       ) : null}
 
       {tab === "companies" && companies ? (
-        <CompaniesPanel
-          result={companies}
-          query={query}
-          sort={sort || "companyName"}
-          listParams={listParams}
-          baseParams={searchBaseParams}
-        />
+        <CompaniesPanel items={companies} listParams={listParams} />
       ) : null}
 
       {tab === "posts" && posts ? (
-        <PostsPanel
-          result={posts}
-          query={query}
-          sort={sort || "-createdAt"}
-          listParams={listParams}
-          baseParams={searchBaseParams}
-        />
+        <PostsPanel items={posts} listParams={listParams} />
       ) : null}
     </>
   );

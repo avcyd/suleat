@@ -1,19 +1,20 @@
-import Link from "next/link";
-import { adminDashboardHref } from "@/lib/admin-href";
+"use client";
 
 type PaginationProps = {
   page: number;
   pageSize: number;
   total: number;
-  /** Current list query params (page is overwritten per link). */
-  listParams: Record<string, string | undefined>;
+  onPageChange: (page: number) => void;
 };
 
+/**
+ * Client pagination — no navigation; parent already has the sorted list in memory.
+ */
 export function Pagination({
   page,
   pageSize,
   total,
-  listParams,
+  onPageChange,
 }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -21,15 +22,10 @@ export function Pagination({
   const prevDisabled = page <= 1;
   const nextDisabled = page >= totalPages;
 
-  const hrefForPage = (nextPage: number) =>
-    adminDashboardHref({ ...listParams, page: String(nextPage) });
-
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-black/8 px-4 py-3 text-sm">
       <p className="text-muted">
-        {total === 0
-          ? "No results"
-          : `Showing ${from}–${to} of ${total}`}
+        {total === 0 ? "No results" : `Showing ${from}–${to} of ${total}`}
       </p>
       <div className="flex items-center gap-2">
         {prevDisabled ? (
@@ -37,12 +33,13 @@ export function Pagination({
             Previous
           </span>
         ) : (
-          <Link
-            href={hrefForPage(page - 1)}
+          <button
+            type="button"
+            onClick={() => onPageChange(page - 1)}
             className="rounded-lg px-3 py-1.5 font-medium text-ink hover:bg-black/[0.04]"
           >
             Previous
-          </Link>
+          </button>
         )}
         <span className="text-xs text-muted">
           Page {page} / {totalPages}
@@ -52,12 +49,13 @@ export function Pagination({
             Next
           </span>
         ) : (
-          <Link
-            href={hrefForPage(page + 1)}
+          <button
+            type="button"
+            onClick={() => onPageChange(page + 1)}
             className="rounded-lg px-3 py-1.5 font-medium text-ink hover:bg-black/[0.04]"
           >
             Next
-          </Link>
+          </button>
         )}
       </div>
     </div>

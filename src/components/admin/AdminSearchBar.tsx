@@ -1,47 +1,44 @@
-import Link from "next/link";
-
-type AdminSearchBarProps = {
-  defaultQuery: string;
-  placeholder: string;
-  /** Current searchParams as a plain object (excluding q/page which we control). */
-  baseParams: Record<string, string | undefined>;
-  sortOptions: Array<{ value: string; label: string }>;
-  currentSort: string;
-};
+"use client";
 
 /**
- * GET form that updates URL search params (server-driven search/sort).
+ * Client admin toolbar — search as you type; pick a sort method then click Sort.
+ * (No URL round-trip — algorithms run in the browser.)
  */
+type SortOption = { value: string; label: string };
+
+type AdminSearchBarProps = {
+  query: string;
+  onQueryChange: (value: string) => void;
+  placeholder: string;
+  sortOptions: SortOption[];
+  sortValue: string;
+  onSortValueChange: (value: string) => void;
+  onSort: () => void;
+};
+
 export function AdminSearchBar({
-  defaultQuery,
+  query,
+  onQueryChange,
   placeholder,
-  baseParams,
   sortOptions,
-  currentSort,
+  sortValue,
+  onSortValueChange,
+  onSort,
 }: AdminSearchBarProps) {
   return (
-    <form
-      method="get"
-      className="flex flex-wrap items-center gap-2 border-b border-black/8 p-3"
-    >
-      {Object.entries(baseParams).map(([key, value]) =>
-        value ? (
-          <input key={key} type="hidden" name={key} value={value} />
-        ) : null,
-      )}
-      <input type="hidden" name="page" value="1" />
+    <div className="flex flex-wrap items-center gap-2 border-b border-black/8 p-3">
       <input
         type="search"
-        name="q"
-        defaultValue={defaultQuery}
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
         placeholder={placeholder}
         className="min-w-0 flex-1 rounded-lg bg-search px-3 py-2 text-sm outline-none placeholder:text-muted focus:ring-1 focus:ring-ink/10"
       />
       <label className="flex items-center gap-1.5 text-xs text-muted">
-        Sort
+        <span className="shrink-0">Sort by</span>
         <select
-          name="sort"
-          defaultValue={currentSort}
+          value={sortValue}
+          onChange={(event) => onSortValueChange(event.target.value)}
           className="rounded-lg bg-search px-2 py-2 text-xs font-medium text-ink outline-none focus:ring-1 focus:ring-ink/10"
         >
           {sortOptions.map((opt) => (
@@ -52,29 +49,21 @@ export function AdminSearchBar({
         </select>
       </label>
       <button
-        type="submit"
+        type="button"
+        onClick={onSort}
         className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-white hover:bg-[#1a2430]"
       >
         Sort
       </button>
-      {defaultQuery ? (
-        <Link
-          href={buildClearHref(baseParams)}
+      {query ? (
+        <button
+          type="button"
+          onClick={() => onQueryChange("")}
           className="rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-black/[0.04]"
         >
           Clear
-        </Link>
+        </button>
       ) : null}
-    </form>
+    </div>
   );
-}
-
-function buildClearHref(baseParams: Record<string, string | undefined>) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(baseParams)) {
-    if (value) params.set(key, value);
-  }
-  params.set("page", "1");
-  const qs = params.toString();
-  return qs ? `/admin/dashboard?${qs}` : "/admin/dashboard";
 }
