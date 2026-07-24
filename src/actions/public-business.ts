@@ -3,31 +3,8 @@
 /**
  * Public offer/business reads for client overlays (no auth).
  */
-import { getPublicBusinessById } from "@/services/offer.service";
-import {
-  formatBranchAddress,
-  formatMenuCategory,
-  formatMenuPrice,
-} from "@/types/merchant";
-import type { MenuCategory } from "@/types/merchant";
-
-export type PublicBusinessView = {
-  id: string;
-  businessName: string;
-  description: string;
-  coverPhoto: string;
-  dateEstablishment: string;
-  companyName: string;
-  branches: Array<{ id: string; label: string }>;
-  menu: Array<{
-    id: string;
-    itemName: string;
-    description?: string;
-    priceLabel: string;
-    categoryLabel: string;
-    isAvailable: boolean;
-  }>;
-};
+import { getCachedPublicBusiness } from "@/lib/offers-cache";
+import type { PublicBusinessView } from "@/types/public-business";
 
 export type PublicBusinessActionState = {
   ok: boolean;
@@ -43,39 +20,8 @@ export async function getPublicBusinessAction(
   }
 
   try {
-    const row = await getPublicBusinessById(businessId);
-    return {
-      ok: true,
-      message: "ok",
-      business: {
-        id: row.id,
-        businessName: row.businessName,
-        description: row.description,
-        coverPhoto: row.coverPhoto,
-        dateEstablishment: row.dateEstablishment.toISOString().slice(0, 10),
-        companyName: row.merchant.companyName,
-        branches: row.branch.map((branch) => ({
-          id: branch.id,
-          label: formatBranchAddress({
-            id: branch.id,
-            number: branch.number,
-            building: branch.building ?? undefined,
-            street: branch.street,
-            barangay: branch.barangay,
-            city: branch.city,
-            province: branch.province,
-          }),
-        })),
-        menu: row.menu.map((item) => ({
-          id: item.id,
-          itemName: item.itemName,
-          description: item.description ?? undefined,
-          priceLabel: formatMenuPrice(Number(item.price)),
-          categoryLabel: formatMenuCategory(item.category as MenuCategory),
-          isAvailable: item.isAvailable,
-        })),
-      },
-    };
+    const business = await getCachedPublicBusiness(businessId.trim());
+    return { ok: true, message: "ok", business };
   } catch (error) {
     return {
       ok: false,

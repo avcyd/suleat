@@ -54,6 +54,8 @@ export type AdminBusinessDetail = {
   coverPhoto: string;
   dateEstablishment: string;
   promotionCount: number;
+  branchTotal: number;
+  menuTotal: number;
   branches: Array<{
     id: string;
     label: string;

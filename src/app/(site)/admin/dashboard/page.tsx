@@ -2,7 +2,7 @@
  * /admin/dashboard
  * ----------------
  * ADMIN-only platform dashboard: requests, users, companies, posts.
- * Lists are server-paginated via URL search params.
+ * Counts + active tab load in parallel; detail drawers parallelized with lists.
  */
 import { redirect } from "next/navigation";
 import { AdminDashboard } from "@/components/admin";
@@ -16,9 +16,9 @@ import {
   mapAdminUserDetail,
   mapAdminUserListItem,
 } from "@/lib/admin-mappers";
+import { getCachedAdminCounts } from "@/lib/admin-cache";
 import { getSession } from "@/lib/session";
 import {
-  getAdminCounts,
   getBusinessById,
   getCompanyById,
   getPostById,
@@ -28,7 +28,13 @@ import {
   listPostsPage,
   listUsersPage,
 } from "@/services/admin.service";
-import type { AdminTab } from "@/types/admin";
+import type {
+  AdminBusinessDetail,
+  AdminCompanyDetail,
+  AdminPostDetail,
+  AdminTab,
+  AdminUserDetail,
+} from "@/types/admin";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -52,6 +58,122 @@ function parsePage(raw: string | undefined) {
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 1) return 1;
   return Math.floor(n);
+}
+
+async function safeMap<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch {
+    return null;
+  }
+}
+
+async function loadTabPayload(opts: {
+  tab: AdminTab;
+  query: string;
+  sort: string;
+  page: number;
+  userId?: string;
+  companyId?: string;
+  businessId?: string;
+  postId?: string;
+}) {
+  const { tab, query, sort, page, userId, companyId, businessId, postId } =
+    opts;
+
+  let users;
+  let companies;
+  let posts;
+  let requests;
+  let selectedUser: AdminUserDetail | null = null;
+  let selectedCompany: AdminCompanyDetail | null = null;
+  let selectedBusiness: AdminBusinessDetail | null = null;
+  let selectedPost: AdminPostDetail | null = null;
+
+  if (tab === "requests") {
+    const result = await listMerchantRequestsPage({
+      search: query || undefined,
+      page,
+      sort: sort || "companyName",
+    });
+    requests = {
+      ...result,
+      items: result.items.map(mapAdminMerchantRequest),
+    };
+  } else if (tab === "users") {
+    const [result, userRow] = await Promise.all([
+      listUsersPage({
+        search: query || undefined,
+        page,
+        sort: sort || "email",
+      }),
+      userId ? safeMap(getUserById(userId)) : Promise.resolve(null),
+    ]);
+    users = {
+      ...result,
+      items: result.items.map(mapAdminUserListItem),
+    };
+    selectedUser = userRow ? mapAdminUserDetail(userRow) : null;
+  } else if (tab === "companies") {
+    const [result, companyRow, businessRow] = await Promise.all([
+      listCompaniesPage({
+        search: query || undefined,
+        page,
+        sort: sort || "companyName",
+      }),
+      companyId ? safeMap(getCompanyById(companyId)) : Promise.resolve(null),
+      businessId ? safeMap(getBusinessById(businessId)) : Promise.resolve(null),
+    ]);
+
+    companies = {
+      ...result,
+      items: result.items.map(mapAdminCompanyListItem),
+    };
+
+    selectedCompany = companyRow ? mapAdminCompanyDetail(companyRow) : null;
+    selectedBusiness = businessRow
+      ? mapAdminBusinessDetail(businessRow)
+      : null;
+
+    if (selectedBusiness) {
+      if (
+        selectedCompany &&
+        selectedBusiness.merchantId !== selectedCompany.id
+      ) {
+        selectedBusiness = null;
+      } else if (!selectedCompany) {
+        const owner = await safeMap(
+          getCompanyById(selectedBusiness.merchantId),
+        );
+        selectedCompany = owner ? mapAdminCompanyDetail(owner) : null;
+      }
+    }
+  } else {
+    const [result, postRow] = await Promise.all([
+      listPostsPage({
+        search: query || undefined,
+        page,
+        sort: sort || "-createdAt",
+      }),
+      postId ? safeMap(getPostById(postId)) : Promise.resolve(null),
+    ]);
+    posts = {
+      ...result,
+      items: result.items.map(mapAdminPostListItem),
+    };
+    selectedPost = postRow ? mapAdminPostDetail(postRow) : null;
+  }
+
+  return {
+    users,
+    companies,
+    posts,
+    requests,
+    selectedUser,
+    selectedCompany,
+    selectedBusiness,
+    selectedPost,
+  };
 }
 
 export default async function AdminDashboardPage({
@@ -79,99 +201,19 @@ export default async function AdminDashboardPage({
   const businessId = first(params.businessId);
   const postId = first(params.postId);
 
-  const counts = await getAdminCounts();
-
-  let users;
-  let companies;
-  let posts;
-  let requests;
-  let selectedUser = null;
-  let selectedCompany = null;
-  let selectedBusiness = null;
-  let selectedPost = null;
-
-  if (tab === "requests") {
-    const result = await listMerchantRequestsPage({
-      search: query || undefined,
+  const [counts, tabPayload] = await Promise.all([
+    getCachedAdminCounts(),
+    loadTabPayload({
+      tab,
+      query,
+      sort,
       page,
-      sort: sort || "companyName",
-    });
-    requests = {
-      ...result,
-      items: result.items.map(mapAdminMerchantRequest),
-    };
-  } else if (tab === "users") {
-    const result = await listUsersPage({
-      search: query || undefined,
-      page,
-      sort: sort || "email",
-    });
-    users = {
-      ...result,
-      items: result.items.map(mapAdminUserListItem),
-    };
-    if (userId) {
-      try {
-        selectedUser = mapAdminUserDetail(await getUserById(userId));
-      } catch {
-        selectedUser = null;
-      }
-    }
-  } else if (tab === "companies") {
-    const result = await listCompaniesPage({
-      search: query || undefined,
-      page,
-      sort: sort || "companyName",
-    });
-    companies = {
-      ...result,
-      items: result.items.map(mapAdminCompanyListItem),
-    };
-    if (companyId) {
-      try {
-        selectedCompany = mapAdminCompanyDetail(await getCompanyById(companyId));
-      } catch {
-        selectedCompany = null;
-      }
-    }
-    if (businessId) {
-      try {
-        selectedBusiness = mapAdminBusinessDetail(
-          await getBusinessById(businessId),
-        );
-        if (!selectedCompany) {
-          try {
-            selectedCompany = mapAdminCompanyDetail(
-              await getCompanyById(selectedBusiness.merchantId),
-            );
-          } catch {
-            selectedCompany = null;
-          }
-        } else if (selectedBusiness.merchantId !== selectedCompany.id) {
-          selectedBusiness = null;
-        }
-      } catch {
-        selectedBusiness = null;
-      }
-    }
-  } else {
-    const result = await listPostsPage({
-      search: query || undefined,
-      page,
-      sort: sort || "-createdAt",
-    });
-    posts = {
-      ...result,
-      items: result.items.map(mapAdminPostListItem),
-    };
-    if (postId) {
-      try {
-        selectedPost = mapAdminPostDetail(await getPostById(postId));
-      } catch {
-        selectedPost = null;
-      }
-    }
-  }
+      userId,
+      companyId,
+      businessId,
+      postId,
+    }),
+  ]);
 
   return (
     <AdminDashboard
@@ -180,14 +222,14 @@ export default async function AdminDashboardPage({
       sort={sort}
       page={page}
       counts={counts}
-      users={users}
-      companies={companies}
-      posts={posts}
-      requests={requests}
-      selectedUser={selectedUser}
-      selectedCompany={selectedCompany}
-      selectedBusiness={selectedBusiness}
-      selectedPost={selectedPost}
+      users={tabPayload.users}
+      companies={tabPayload.companies}
+      posts={tabPayload.posts}
+      requests={tabPayload.requests}
+      selectedUser={tabPayload.selectedUser}
+      selectedCompany={tabPayload.selectedCompany}
+      selectedBusiness={tabPayload.selectedBusiness}
+      selectedPost={tabPayload.selectedPost}
     />
   );
 }

@@ -75,6 +75,8 @@ model Merchant {
   verificationStatus Boolean
   taxId              String
   businesses         Business[]
+
+  @@index([verificationStatus])
 }
 
 model Business {

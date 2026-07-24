@@ -1,12 +1,9 @@
 /**
  * Server-side session helper
  * --------------------------
- * NextAuth v4 + Next.js 15/16 Server Actions can fail to surface cookies to
- * `getServerSession`, which shows up as "You must be signed in" while the
- * client `useSession()` still looks logged in.
- *
- * Strategy: try getServerSession first, then fall back to decoding the JWT
- * cookie via `next/headers` + `getToken`.
+ * Prefer decoding the JWT cookie first (cheap). Fall back to getServerSession
+ * only when the cookie path fails — avoids the common NextAuth + Server Action
+ * double cost that made every dashboard action feel slow.
  */
 import { cookies } from "next/headers";
 import type { Session } from "next-auth";
@@ -50,7 +47,6 @@ async function getSessionFromCookies(): Promise<Session | null> {
   if (!secret) return null;
 
   const token = await getToken({
-    // Minimal request shape accepted by next-auth/jwt getToken
     req: { headers: { cookie: cookieHeader } } as Parameters<
       typeof getToken
     >[0]["req"],
@@ -62,14 +58,17 @@ async function getSessionFromCookies(): Promise<Session | null> {
 }
 
 export async function getSession(): Promise<Session | null> {
-  try {
-    const session = await getServerSession(authOptions);
-    if (session?.user?.id) {
-      return session;
-    }
-  } catch {
-    // Fall through to cookie JWT decode.
+  const fromCookies = await getSessionFromCookies();
+  if (fromCookies?.user?.id) {
+    return fromCookies;
   }
 
-  return getSessionFromCookies();
+  try {
+    const session = await getServerSession(authOptions);
+    if (session?.user?.id) return session;
+  } catch {
+    // ignore
+  }
+
+  return null;
 }

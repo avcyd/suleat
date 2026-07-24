@@ -22,14 +22,14 @@ function parseSort(sort?: string): { field: string; dir: "asc" | "desc" } {
 }
 
 export async function getAdminCounts() {
-  const [users, companies, posts, admins, pendingRequests] = await Promise.all([
+  // Only counts shown in the dashboard chrome (skip unused admin-role count).
+  const [users, companies, posts, pendingRequests] = await Promise.all([
     prisma.user.count(),
     prisma.merchant.count({ where: { verificationStatus: true } }),
     prisma.promotion.count(),
-    prisma.user.count({ where: { role: "ADMIN" } }),
     prisma.merchant.count({ where: { verificationStatus: false } }),
   ]);
-  return { users, companies, posts, admins, pendingRequests };
+  return { users, companies, posts, admins: 0, pendingRequests };
 }
 
 /** List users; search matches id (exact) or email (contains) only. */
@@ -203,7 +203,12 @@ export async function listCompaniesPage(opts?: {
 export async function getCompanyById(merchantId: string) {
   const company = await prisma.merchant.findUnique({
     where: { id: merchantId },
-    include: {
+    select: {
+      id: true,
+      companyName: true,
+      phoneNumber: true,
+      taxId: true,
+      verificationStatus: true,
       user: {
         select: { id: true, email: true, displayName: true, role: true },
       },
@@ -217,7 +222,9 @@ export async function getCompanyById(merchantId: string) {
           _count: { select: { branch: true, menu: true, promotion: true } },
         },
         orderBy: { businessName: "asc" },
+        take: 50,
       },
+      _count: { select: { businesses: true } },
     },
   });
 
@@ -228,7 +235,7 @@ export async function getCompanyById(merchantId: string) {
   return company;
 }
 
-/** Full business detail for admin (branches + menu). */
+/** Full business detail for admin (bounded branches + menu for drawer speed). */
 export async function getBusinessById(businessId: string) {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
@@ -242,6 +249,7 @@ export async function getBusinessById(businessId: string) {
       merchant: { select: { companyName: true } },
       branch: {
         orderBy: { street: "asc" },
+        take: 40,
         select: {
           id: true,
           number: true,
@@ -254,6 +262,7 @@ export async function getBusinessById(businessId: string) {
       },
       menu: {
         orderBy: [{ category: "asc" }, { itemName: "asc" }],
+        take: 60,
         select: {
           id: true,
           itemName: true,
@@ -263,7 +272,7 @@ export async function getBusinessById(businessId: string) {
           isAvailable: true,
         },
       },
-      _count: { select: { promotion: true } },
+      _count: { select: { promotion: true, branch: true, menu: true } },
     },
   });
 
@@ -370,7 +379,19 @@ export async function listPostsPage(opts?: {
 export async function getPostById(postId: string) {
   const post = await prisma.promotion.findUnique({
     where: { id: postId },
-    include: {
+    select: {
+      id: true,
+      caption: true,
+      description: true,
+      promotionType: true,
+      discountPercent: true,
+      bundleType: true,
+      buyQuantity: true,
+      getQuantity: true,
+      bundleDiscountPercent: true,
+      startDate: true,
+      endDate: true,
+      createdAt: true,
       business: {
         select: {
           id: true,
@@ -380,7 +401,17 @@ export async function getPostById(postId: string) {
           },
         },
       },
-      branch: true,
+      branch: {
+        select: {
+          id: true,
+          number: true,
+          building: true,
+          street: true,
+          barangay: true,
+          city: true,
+          province: true,
+        },
+      },
     },
   });
 

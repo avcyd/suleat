@@ -133,3 +133,99 @@ export function AccountPageSkeleton() {
     </main>
   );
 }
+
+export function AdminPanelSkeleton() {
+  return (
+    <div className="p-3" aria-busy="true" aria-label="Loading admin panel">
+      <div className="flex flex-wrap items-center gap-2 border-b border-black/8 pb-3">
+        <SkeletonPulse className="h-10 min-w-0 flex-1" />
+        <SkeletonPulse className="h-10 w-28" />
+        <SkeletonPulse className="h-10 w-20" />
+      </div>
+      <div className="mt-3 space-y-2">
+        {Array.from({ length: 8 }, (_, i) => (
+          <SkeletonPulse key={i} className="h-12 w-full rounded-lg" />
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-between border-t border-black/8 pt-3">
+        <SkeletonPulse className="h-4 w-40" />
+        <SkeletonPulse className="h-8 w-36" />
+      </div>
+    </div>
+  );
+}
+
+export function AdminDashboardSkeleton() {
+  return (
+    <main
+      className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8"
+      aria-busy="true"
+      aria-label="Loading admin dashboard"
+    >
+      <header className="flex flex-col gap-3 border-b border-black/8 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <SkeletonPulse className="h-3 w-28" />
+          <SkeletonPulse className="mt-2 h-8 w-56" />
+        </div>
+        <div className="flex flex-wrap gap-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <SkeletonPulse key={i} className="h-5 w-20" />
+          ))}
+        </div>
+      </header>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-[200px_minmax(0,1fr)]">
+        <div className="flex gap-1 overflow-hidden lg:flex-col">
+          {Array.from({ length: 4 }, (_, i) => (
+            <SkeletonPulse key={i} className="h-10 w-28 lg:w-full" />
+          ))}
+        </div>
+        <div className="min-w-0 rounded-xl border border-black/8 bg-white">
+          <AdminPanelSkeleton />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+export function MerchantDashboardSkeleton() {
+  return (
+    <main
+      className="mx-auto w-full max-w-[1100px] px-4 py-6 sm:px-6 sm:py-8"
+      aria-busy="true"
+      aria-label="Loading merchant dashboard"
+    >
+      <SkeletonPulse className="h-8 w-64" />
+      <SkeletonPulse className="mt-2 h-4 w-80" />
+      <div className="mt-6 flex gap-2 overflow-hidden">
+        {Array.from({ length: 4 }, (_, i) => (
+          <SkeletonPulse key={i} className="h-10 w-28 shrink-0" />
+        ))}
+      </div>
+      <div className="mt-5 space-y-3 rounded-xl border border-black/8 bg-white p-4">
+        {Array.from({ length: 5 }, (_, i) => (
+          <SkeletonPulse key={i} className="h-16 w-full rounded-lg" />
+        ))}
+      </div>
+    </main>
+  );
+}
+
+export function MerchantsPageSkeleton() {
+  return (
+    <main
+      className="mx-auto w-full max-w-[720px] px-4 py-8 sm:px-6"
+      aria-busy="true"
+      aria-label="Loading merchants page"
+    >
+      <SkeletonPulse className="h-8 w-56" />
+      <SkeletonPulse className="mt-2 h-4 w-full max-w-md" />
+      <div className="mt-8 space-y-4 rounded-xl border border-black/8 bg-white p-5">
+        {Array.from({ length: 6 }, (_, i) => (
+          <SkeletonPulse key={i} className="h-11 w-full" />
+        ))}
+        <SkeletonPulse className="mt-2 h-11 w-36" />
+      </div>
+    </main>
+  );
+}

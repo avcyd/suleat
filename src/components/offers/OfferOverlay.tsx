@@ -1,14 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import {
-  getPublicBusinessAction,
-  type PublicBusinessView,
-} from "@/actions/public-business";
+import { getPublicBusinessAction } from "@/actions/public-business";
 import { SmartImage } from "@/components/ui/SmartImage";
 import type { Offer } from "@/types/landing";
 import { formatMenuPrice } from "@/types/merchant";
+import type { PublicBusinessView } from "@/types/public-business";
 
 type OfferOverlayProps = {
   offer: Offer | null;
@@ -16,6 +14,9 @@ type OfferOverlayProps = {
 };
 
 type Panel = "offer" | "business";
+
+/** In-memory cache so reopening the same business is instant. */
+const businessCache = new Map<string, PublicBusinessView>();
 
 function formatExpiresIn(endDateYmd: string): string {
   const end = new Date(`${endDateYmd}T23:59:59`);
@@ -46,7 +47,8 @@ function OfferPrice({ offer }: { offer: Offer }) {
 
   if (offer.promotionType === "DISCOUNT" && offer.discountPercent != null) {
     const discounted =
-      offer.menuPrice * (1 - Math.min(100, Math.max(0, offer.discountPercent)) / 100);
+      offer.menuPrice *
+      (1 - Math.min(100, Math.max(0, offer.discountPercent)) / 100);
     return (
       <dd className="text-right font-medium text-ink">
         <span className="mr-2 text-muted line-through">{original}</span>
@@ -58,25 +60,120 @@ function OfferPrice({ offer }: { offer: Offer }) {
   return <dd className="font-medium text-ink">{original}</dd>;
 }
 
-function BusinessPanel({
-  businessId,
+async function loadBusiness(businessId: string): Promise<PublicBusinessView> {
+  const cached = businessCache.get(businessId);
+  if (cached) return cached;
+
+  const result = await getPublicBusinessAction(businessId);
+  if (!result.ok || !result.business) {
+    throw new Error(result.message || "Could not load business.");
+  }
+  businessCache.set(businessId, result.business);
+  return result.business;
+}
+
+function MenuDropdown({
+  menu,
 }: {
-  businessId: string;
+  menu: PublicBusinessView["menu"];
 }) {
+  const byCategory = useMemo(() => {
+    const groups = new Map<string, PublicBusinessView["menu"]>();
+    for (const item of menu) {
+      const list = groups.get(item.categoryLabel) ?? [];
+      list.push(item);
+      groups.set(item.categoryLabel, list);
+    }
+    return [...groups.entries()];
+  }, [menu]);
+
+  if (menu.length === 0) {
+    return <p className="mt-2 text-sm text-muted">No menu items yet.</p>;
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      <details className="group rounded-lg border border-black/8 bg-search/60 open:bg-white">
+        <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-medium text-ink marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center justify-between gap-2">
+            <span>Menu ({menu.length} items)</span>
+            <span className="text-xs text-muted transition-transform group-open:rotate-180">
+              ▾
+            </span>
+          </span>
+        </summary>
+        <div className="space-y-2 border-t border-black/6 px-2 py-2">
+          {byCategory.map(([category, items]) => (
+            <details
+              key={category}
+              className="rounded-md bg-search/80 open:bg-search"
+            >
+              <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted marker:content-none [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center justify-between gap-2">
+                  <span>
+                    {category} ({items.length})
+                  </span>
+                  <span className="normal-case tracking-normal">▾</span>
+                </span>
+              </summary>
+              <ul className="divide-y divide-black/5 px-3 pb-2">
+                {items.map((item) => (
+                  <li key={item.id} className="py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-ink">
+                          {item.itemName}
+                          {!item.isAvailable ? (
+                            <span className="ml-1.5 text-[10px] font-normal text-muted">
+                              Unavailable
+                            </span>
+                          ) : null}
+                        </p>
+                        {item.description ? (
+                          <p className="mt-0.5 text-xs text-[#555]">
+                            {item.description}
+                          </p>
+                        ) : null}
+                      </div>
+                      <p className="shrink-0 text-sm font-semibold text-ink">
+                        {item.priceLabel}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function BusinessPanel({ businessId }: { businessId: string }) {
   const [pending, startTransition] = useTransition();
-  const [business, setBusiness] = useState<PublicBusinessView | null>(null);
+  const [business, setBusiness] = useState<PublicBusinessView | null>(
+    () => businessCache.get(businessId) ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const cached = businessCache.get(businessId);
+    if (cached) {
+      setBusiness(cached);
+      setError(null);
+      return;
+    }
+
     setError(null);
     setBusiness(null);
     startTransition(async () => {
-      const result = await getPublicBusinessAction(businessId);
-      if (!result.ok || !result.business) {
-        setError(result.message);
-        return;
+      try {
+        const next = await loadBusiness(businessId);
+        setBusiness(next);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not load business.");
       }
-      setBusiness(result.business);
     });
   }, [businessId]);
 
@@ -137,39 +234,9 @@ function BusinessPanel({
 
       <div className="mt-5">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Menu ({business.menu.length})
+          Menu
         </h4>
-        {business.menu.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">No menu items yet.</p>
-        ) : (
-          <ul className="mt-2 divide-y divide-black/5">
-            {business.menu.map((item) => (
-              <li key={item.id} className="py-2.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-ink">
-                      {item.itemName}
-                      {!item.isAvailable ? (
-                        <span className="ml-1.5 text-[10px] font-normal text-muted">
-                          Unavailable
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className="text-[11px] text-muted">{item.categoryLabel}</p>
-                    {item.description ? (
-                      <p className="mt-0.5 text-xs text-[#555]">
-                        {item.description}
-                      </p>
-                    ) : null}
-                  </div>
-                  <p className="shrink-0 text-sm font-semibold text-ink">
-                    {item.priceLabel}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <MenuDropdown menu={business.menu} />
       </div>
     </div>
   );
@@ -190,6 +257,15 @@ export function OfferOverlay({ offer, onClose }: OfferOverlayProps) {
   useEffect(() => {
     if (offer) setPanel("offer");
   }, [offer?.id]);
+
+  // Prefetch business while user reads the promo so "View business" feels instant.
+  useEffect(() => {
+    if (!offer?.businessId) return;
+    if (businessCache.has(offer.businessId)) return;
+    void loadBusiness(offer.businessId).catch(() => {
+      // Prefetch failures are non-blocking; BusinessPanel will retry.
+    });
+  }, [offer?.businessId]);
 
   useEffect(() => {
     if (!offer) return;
@@ -335,10 +411,7 @@ export function OfferOverlay({ offer, onClose }: OfferOverlayProps) {
             </div>
           ) : (
             <>
-              <h2
-                id="business-overlay-title"
-                className="sr-only"
-              >
+              <h2 id="business-overlay-title" className="sr-only">
                 Business details
               </h2>
               <BusinessPanel businessId={offer.businessId} />

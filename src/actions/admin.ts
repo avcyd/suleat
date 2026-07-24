@@ -34,11 +34,14 @@ async function requireAdmin() {
 }
 
 function refreshAdmin() {
+  updateTag("admin-counts");
   revalidatePath("/admin/dashboard");
 }
 
-function refreshPublicOffers() {
+function refreshPublicOffers(businessId?: string) {
   updateTag("offers");
+  updateTag("public-business");
+  if (businessId) updateTag(`public-business:${businessId}`);
   revalidatePath("/");
   revalidatePath("/offers");
 }
@@ -145,7 +148,7 @@ export async function deleteBusinessAction(
   try {
     await deleteBusiness(businessId);
     refreshAdmin();
-    refreshPublicOffers();
+    refreshPublicOffers(businessId);
     revalidatePath("/merchant/dashboard");
     return { ok: true, message: "Business deleted." };
   } catch (error) {

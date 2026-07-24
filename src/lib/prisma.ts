@@ -1,37 +1,43 @@
 /**
  * Prisma Client singleton
  * -----------------------
- * WHY: In Next.js (especially with hot reload), importing `new PrismaClient()`
- * in many files can open too many DB connections. We reuse one instance.
- *
- * Prisma v7 requires a driver adapter (here: PostgreSQL via `@prisma/adapter-pg`).
- * The generated client lives in `/generated/prisma` (see prisma/schema.prisma).
- *
- * Bump PRISMA_SINGLETON_REV after `prisma generate` when the schema gains
- * fields/relations, so a stale globalThis client is replaced without a full
- * process restart.
+ * Reuses one PrismaClient + one pg Pool across hot reloads / serverless
+ * invocations in the same process to cut connection churn.
  */
+import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../generated/prisma/client";
 
-/** Bump when generated client shape changes (e.g. new Promotion.branch). */
-const PRISMA_SINGLETON_REV = 6;
+/** Bump when generated client shape changes. */
+const PRISMA_SINGLETON_REV = 7;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
   prismaRev: number | undefined;
+  pgPool: Pool | undefined;
 };
 
-function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL;
+function getPool() {
+  if (globalForPrisma.pgPool) return globalForPrisma.pgPool;
 
+  const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(
       "Missing DATABASE_URL. Add it to your .env file before using Prisma.",
     );
   }
 
-  const adapter = new PrismaPg({ connectionString });
+  globalForPrisma.pgPool = new Pool({
+    connectionString,
+    max: 5,
+    idleTimeoutMillis: 20_000,
+    connectionTimeoutMillis: 10_000,
+  });
+  return globalForPrisma.pgPool;
+}
+
+function createPrismaClient() {
+  const adapter = new PrismaPg(getPool());
   return new PrismaClient({ adapter });
 }
 

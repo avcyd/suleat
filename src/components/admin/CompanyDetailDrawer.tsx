@@ -89,40 +89,49 @@ export function CompanyDetailDrawer({
 
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-ink">
-                Businesses ({company.businesses.length})
+                Businesses ({company.businessCount})
               </h3>
               {company.businesses.length === 0 ? (
                 <p className="mt-2 text-sm text-muted">No businesses yet.</p>
               ) : (
-                <ul className="mt-3 space-y-2">
-                  {company.businesses.map((business) => (
-                    <li key={business.id}>
-                      <Link
-                        href={adminDashboardHref({
-                          ...listParams,
-                          companyId: company.id,
-                          businessId: business.id,
-                        })}
-                        className="block rounded-lg bg-search/80 px-3 py-2.5 transition-colors hover:bg-search"
-                      >
-                        <p className="text-sm font-medium text-ink">
-                          {business.businessName}
-                        </p>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-muted">
-                          {business.description}
-                        </p>
-                        <p className="mt-1.5 text-[11px] text-muted">
-                          Est. {business.dateEstablishment} ·{" "}
-                          {business.branchCount} branches · {business.menuCount}{" "}
-                          menu · {business.promotionCount} posts
-                        </p>
-                        <p className="mt-1 text-[11px] font-medium text-brand-deep">
-                          View details →
-                        </p>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="mt-3 space-y-2">
+                    {company.businesses.map((business) => (
+                      <li key={business.id}>
+                        <Link
+                          href={adminDashboardHref({
+                            ...listParams,
+                            companyId: company.id,
+                            businessId: business.id,
+                          })}
+                          className="block rounded-lg bg-search/80 px-3 py-2.5 transition-colors hover:bg-search"
+                        >
+                          <p className="text-sm font-medium text-ink">
+                            {business.businessName}
+                          </p>
+                          <p className="mt-0.5 line-clamp-2 text-xs text-muted">
+                            {business.description}
+                          </p>
+                          <p className="mt-1.5 text-[11px] text-muted">
+                            Est. {business.dateEstablishment} ·{" "}
+                            {business.branchCount} branches ·{" "}
+                            {business.menuCount} menu ·{" "}
+                            {business.promotionCount} posts
+                          </p>
+                          <p className="mt-1 text-[11px] font-medium text-brand-deep">
+                            View details →
+                          </p>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                  {company.businessCount > company.businesses.length ? (
+                    <p className="mt-2 text-xs text-muted">
+                      Showing first {company.businesses.length} of{" "}
+                      {company.businessCount}
+                    </p>
+                  ) : null}
+                </>
               )}
             </div>
           </>

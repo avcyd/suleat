@@ -6,7 +6,7 @@
  * Session → FormData → Zod → menu service.
  * Menu items are scoped to a Business the merchant owns.
  */
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getSession } from "@/lib/session";
 import {
   createMenuItem,
@@ -39,8 +39,13 @@ function formFields(formData: FormData) {
   };
 }
 
-function refreshDashboard() {
+function refreshDashboard(businessId?: string) {
+  updateTag("public-business");
+  if (businessId) updateTag(`public-business:${businessId}`);
+  updateTag("offers");
   revalidatePath("/merchant/dashboard");
+  revalidatePath("/");
+  revalidatePath("/offers");
 }
 
 /** Create a menu item under a business. */
@@ -66,7 +71,7 @@ export async function createMenuItemAction(
 
   try {
     await createMenuItem(session.user.id, parsed.data);
-    refreshDashboard();
+    refreshDashboard(parsed.data.businessId);
     return { ok: true, message: "Menu item created." };
   } catch (error) {
     return {

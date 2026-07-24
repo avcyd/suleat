@@ -28,40 +28,42 @@ async function HomeOffers() {
 async function HomeMerchantCta() {
   const session = await getSession();
 
-  let merchantCtaStatus: MerchantCtaStatus = "guest";
-  let rejectionNotice = null;
-
   if (!session?.user) {
-    return (
-      <MerchantCta
-        status={merchantCtaStatus}
-        rejectionNotice={rejectionNotice}
-      />
-    );
+    return <MerchantCta status="guest" rejectionNotice={null} />;
   }
+
+  let merchantCtaStatus: MerchantCtaStatus = "guest";
 
   if (session.user.role === "ADMIN") {
     merchantCtaStatus = "admin";
   } else if (session.user.role === "MERCHANT") {
     merchantCtaStatus = "merchant";
-  } else {
-    const pending = await prisma.merchant.findUnique({
-      where: { userId: session.user.id },
-      select: { verificationStatus: true },
-    });
+  }
+
+  // Role status + rejection notice in parallel for USER; skip merchant lookup for known roles.
+  const [pending, unread] = await Promise.all([
+    merchantCtaStatus === "guest"
+      ? prisma.merchant.findUnique({
+          where: { userId: session.user.id },
+          select: { verificationStatus: true },
+        })
+      : Promise.resolve(null),
+    listUnreadNotifications(session.user.id),
+  ]);
+
+  if (merchantCtaStatus === "guest") {
     merchantCtaStatus =
       pending && !pending.verificationStatus ? "pending" : "apply";
   }
 
-  const unread = await listUnreadNotifications(session.user.id);
   const rejection = unread.find((item) => item.type === "MERCHANT_REJECTED");
-  if (rejection) {
-    rejectionNotice = {
-      id: rejection.id,
-      title: rejection.title,
-      message: rejection.message,
-    };
-  }
+  const rejectionNotice = rejection
+    ? {
+        id: rejection.id,
+        title: rejection.title,
+        message: rejection.message,
+      }
+    : null;
 
   return (
     <MerchantCta

@@ -128,6 +128,7 @@ export function mapAdminCompanyDetail(merchant: {
     dateEstablishment: Date;
     _count: { branch: number; menu: number; promotion: number };
   }>;
+  _count?: { businesses: number };
 }): AdminCompanyDetail {
   return {
     id: merchant.id,
@@ -135,7 +136,7 @@ export function mapAdminCompanyDetail(merchant: {
     phoneNumber: merchant.phoneNumber,
     taxId: merchant.taxId,
     verificationStatus: merchant.verificationStatus,
-    businessCount: merchant.businesses.length,
+    businessCount: merchant._count?.businesses ?? merchant.businesses.length,
     ownerEmail: merchant.user.email,
     ownerName: merchant.user.displayName,
     ownerUserId: merchant.user.id,
@@ -177,7 +178,7 @@ export function mapAdminBusinessDetail(business: {
     category: string;
     isAvailable: boolean;
   }>;
-  _count: { promotion: number };
+  _count: { promotion: number; branch: number; menu: number };
 }): AdminBusinessDetail {
   return {
     id: business.id,
@@ -188,6 +189,8 @@ export function mapAdminBusinessDetail(business: {
     coverPhoto: business.coverPhoto,
     dateEstablishment: business.dateEstablishment.toISOString().slice(0, 10),
     promotionCount: business._count.promotion,
+    branchTotal: business._count.branch,
+    menuTotal: business._count.menu,
     branches: business.branch.map((branch) => ({
       id: branch.id,
       label: formatBranchAddress({

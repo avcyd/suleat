@@ -6,7 +6,7 @@
  * Session → FormData → Zod → business service.
  * Create/update/delete require a Merchant account (enforced in the service).
  */
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getSession } from "@/lib/session";
 import {
   addBranchForUser,
@@ -55,8 +55,13 @@ function updateFormFields(formData: FormData) {
   };
 }
 
-function refreshDashboard() {
+function refreshDashboard(businessId?: string) {
+  updateTag("public-business");
+  if (businessId) updateTag(`public-business:${businessId}`);
+  updateTag("offers");
   revalidatePath("/merchant/dashboard");
+  revalidatePath("/");
+  revalidatePath("/offers");
 }
 
 /** Create a business (+ branches) for the logged-in merchant. */
@@ -79,7 +84,7 @@ export async function createBusinessAction(
 
   try {
     const business = await createBusiness(session.user.id, parsed.data);
-    refreshDashboard();
+    refreshDashboard(business.id);
     return {
       ok: true,
       message: "Business created.",
@@ -119,7 +124,7 @@ export async function updateBusinessAction(
 
   try {
     await updateBusinessForUser(session.user.id, businessId, parsed.data);
-    refreshDashboard();
+    refreshDashboard(businessId);
     return { ok: true, message: "Business updated.", businessId };
   } catch (error) {
     return {
@@ -145,7 +150,7 @@ export async function deleteBusinessAction(
 
   try {
     await deleteBusinessForUser(session.user.id, businessId);
-    refreshDashboard();
+    refreshDashboard(businessId);
     return { ok: true, message: "Business deleted." };
   } catch (error) {
     return {
@@ -185,7 +190,7 @@ export async function addBranchAction(
   try {
     const { businessId, ...branch } = parsed.data;
     await addBranchForUser(session.user.id, businessId, branch);
-    refreshDashboard();
+    refreshDashboard(businessId);
     return { ok: true, message: "Branch added.", businessId };
   } catch (error) {
     return {

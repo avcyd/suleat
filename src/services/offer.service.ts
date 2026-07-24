@@ -10,9 +10,7 @@ const offerInclude = {
     select: {
       id: true,
       businessName: true,
-      description: true,
       coverPhoto: true,
-      dateEstablishment: true,
       merchant: { select: { companyName: true } },
     },
   },

@@ -20,10 +20,19 @@ export async function createNotification(input: {
   });
 }
 
-export async function listUnreadNotifications(userId: string) {
+export async function listUnreadNotifications(userId: string, limit = 20) {
   return prisma.notification.findMany({
     where: { userId, read: false },
     orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      type: true,
+      title: true,
+      message: true,
+      read: true,
+      createdAt: true,
+    },
   });
 }
 

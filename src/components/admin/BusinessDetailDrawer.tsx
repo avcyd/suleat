@@ -101,61 +101,83 @@ export function BusinessDetailDrawer({
 
             <div className="mt-5">
               <h4 className="text-sm font-semibold text-ink">
-                Locations ({business.branches.length})
+                Locations ({business.branchTotal})
               </h4>
               {business.branches.length === 0 ? (
                 <p className="mt-2 text-sm text-muted">No branches.</p>
               ) : (
-                <ul className="mt-2 space-y-1.5">
-                  {business.branches.map((branch) => (
-                    <li
-                      key={branch.id}
-                      className="rounded-md bg-search px-3 py-2 text-xs text-ink"
-                    >
-                      {branch.label}
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="mt-2 space-y-1.5">
+                    {business.branches.map((branch) => (
+                      <li
+                        key={branch.id}
+                        className="rounded-md bg-search px-3 py-2 text-xs text-ink"
+                      >
+                        {branch.label}
+                      </li>
+                    ))}
+                  </ul>
+                  {business.branchTotal > business.branches.length ? (
+                    <p className="mt-2 text-xs text-muted">
+                      Showing first {business.branches.length} of{" "}
+                      {business.branchTotal}
+                    </p>
+                  ) : null}
+                </>
               )}
             </div>
 
             <div className="mt-5">
-              <h4 className="text-sm font-semibold text-ink">
-                Menu ({business.menu.length})
-              </h4>
-              {business.menu.length === 0 ? (
-                <p className="mt-2 text-sm text-muted">No menu items.</p>
-              ) : (
-                <ul className="mt-2 divide-y divide-black/5">
-                  {business.menu.map((item) => (
-                    <li key={item.id} className="py-2.5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-ink">
-                            {item.itemName}
-                            {!item.isAvailable ? (
-                              <span className="ml-1.5 text-[10px] font-normal text-muted">
-                                Unavailable
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="text-[11px] text-muted">
-                            {item.categoryLabel}
-                          </p>
-                          {item.description ? (
-                            <p className="mt-0.5 text-xs text-[#555]">
-                              {item.description}
+              <details className="group rounded-lg border border-black/8 bg-search/50 open:bg-white">
+                <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-semibold text-ink marker:content-none [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center justify-between gap-2">
+                    <span>Menu ({business.menuTotal})</span>
+                    <span className="text-xs font-normal text-muted transition-transform group-open:rotate-180">
+                      ▾
+                    </span>
+                  </span>
+                </summary>
+                {business.menu.length === 0 ? (
+                  <p className="border-t border-black/6 px-3 py-2 text-sm text-muted">
+                    No menu items.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-black/5 border-t border-black/6 px-3">
+                    {business.menu.map((item) => (
+                      <li key={item.id} className="py-2.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-ink">
+                              {item.itemName}
+                              {!item.isAvailable ? (
+                                <span className="ml-1.5 text-[10px] font-normal text-muted">
+                                  Unavailable
+                                </span>
+                              ) : null}
                             </p>
-                          ) : null}
+                            <p className="text-[11px] text-muted">
+                              {item.categoryLabel}
+                            </p>
+                            {item.description ? (
+                              <p className="mt-0.5 text-xs text-[#555]">
+                                {item.description}
+                              </p>
+                            ) : null}
+                          </div>
+                          <p className="shrink-0 text-sm font-semibold text-ink">
+                            {item.priceLabel}
+                          </p>
                         </div>
-                        <p className="shrink-0 text-sm font-semibold text-ink">
-                          {item.priceLabel}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {business.menuTotal > business.menu.length ? (
+                  <p className="border-t border-black/6 px-3 py-2 text-xs text-muted">
+                    Showing first {business.menu.length} of {business.menuTotal}
+                  </p>
+                ) : null}
+              </details>
             </div>
           </>
         ) : null}
