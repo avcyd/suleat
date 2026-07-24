@@ -64,6 +64,47 @@ export async function listActiveOffers(limit = 80) {
   });
 }
 
+/**
+ * Top N promotions by effective discount % for the hero carousel.
+ * Loads an active working set from the DB, then ranks by DISCOUNT / BUNDLE
+ * effective percent so FREE buy-X-get-Y deals are included fairly.
+ */
+export async function listTopDiscountOffers(limit = 3) {
+  const rows = await listActiveOffers(80);
+
+  const ranked = [...rows].sort((a, b) => {
+    const aPct = effectiveDiscountFromRow(a);
+    const bPct = effectiveDiscountFromRow(b);
+    if (bPct !== aPct) return bPct - aPct;
+    const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
+    const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
+    return bTime - aTime;
+  });
+
+  return ranked.slice(0, limit);
+}
+
+function effectiveDiscountFromRow(row: {
+  promotionType: "DISCOUNT" | "BUNDLE";
+  discountPercent: number | null;
+  bundleType: "FREE" | "PERCENTAGE_OFF" | null;
+  buyQuantity: number | null;
+  getQuantity: number | null;
+  bundleDiscountPercent: number | null;
+}): number {
+  if (row.promotionType === "DISCOUNT") {
+    return row.discountPercent ?? 0;
+  }
+  if (row.bundleType === "PERCENTAGE_OFF") {
+    return row.bundleDiscountPercent ?? 0;
+  }
+  const buy = row.buyQuantity ?? 0;
+  const get = row.getQuantity ?? 0;
+  const total = buy + get;
+  if (total <= 0) return 0;
+  return Math.round((get / total) * 100);
+}
+
 /** Public business profile with branches and menu (for offer overlays). */
 export async function getPublicBusinessById(businessId: string) {
   const business = await prisma.business.findUnique({

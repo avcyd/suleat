@@ -1,8 +1,8 @@
 /**
- * Homepage — stream static chrome immediately; offers + CTA load in Suspense.
+ * Homepage — stream static chrome immediately; hero + offers + CTA load in Suspense.
  */
 import { Suspense } from "react";
-import { categories, heroSlides } from "@/data";
+import { categories } from "@/data";
 import {
   Categories,
   HeroCarousel,
@@ -12,13 +12,30 @@ import {
 import {
   LatestOffersSectionSkeleton,
   MerchantCtaSkeleton,
+  SkeletonPulse,
 } from "@/components/ui/skeletons";
 import { toOffer } from "@/lib/offer-mappers";
-import { getCachedLatestOffers } from "@/lib/offers-cache";
+import {
+  getCachedLatestOffers,
+  getCachedTopDiscountOffers,
+} from "@/lib/offers-cache";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { listUnreadNotifications } from "@/services/notification.service";
 import type { MerchantCtaStatus } from "@/types/landing-cta";
+
+function HeroCarouselSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-[914px] px-4 sm:px-6" aria-busy="true">
+      <SkeletonPulse className="h-[220px] w-full rounded-[15px] sm:h-[280px]" />
+    </div>
+  );
+}
+
+async function HomeHero() {
+  const rows = await getCachedTopDiscountOffers(3);
+  return <HeroCarousel offers={rows.map(toOffer)} />;
+}
 
 async function HomeOffers() {
   const rows = await getCachedLatestOffers(5);
@@ -40,7 +57,6 @@ async function HomeMerchantCta() {
     merchantCtaStatus = "merchant";
   }
 
-  // Role status + rejection notice in parallel for USER; skip merchant lookup for known roles.
   const [pending, unread] = await Promise.all([
     merchantCtaStatus === "guest"
       ? prisma.merchant.findUnique({
@@ -76,7 +92,9 @@ async function HomeMerchantCta() {
 export default function Home() {
   return (
     <main className="flex flex-col gap-8 pb-4 pt-5 sm:gap-10 sm:pt-6 lg:gap-8">
-      <HeroCarousel slides={heroSlides} />
+      <Suspense fallback={<HeroCarouselSkeleton />}>
+        <HomeHero />
+      </Suspense>
       <Categories categories={categories} />
       <Suspense fallback={<LatestOffersSectionSkeleton />}>
         <HomeOffers />

@@ -6,6 +6,7 @@ import {
   getPublicBusinessById,
   listActiveOffers,
   listLatestOffers,
+  listTopDiscountOffers,
 } from "@/services/offer.service";
 import type { PublicBusinessView } from "@/types/public-business";
 import {
@@ -24,6 +25,13 @@ export const getCachedLatestOffers = unstable_cache(
 export const getCachedActiveOffers = unstable_cache(
   async () => listActiveOffers(),
   ["active-offers"],
+  { revalidate: 60, tags: ["offers"] },
+);
+
+/** Top 3 highest-discount promotions for landing / offers hero carousel. */
+export const getCachedTopDiscountOffers = unstable_cache(
+  async (limit = 3) => listTopDiscountOffers(limit),
+  ["top-discount-offers"],
   { revalidate: 60, tags: ["offers"] },
 );
 

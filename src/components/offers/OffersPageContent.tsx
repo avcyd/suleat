@@ -11,9 +11,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { OfferCardsWithDetails } from "@/components/offers/OfferCardsWithDetails";
 import { HeroCarousel } from "@/components/landing/HeroCarousel";
-import { heroSlides } from "@/data";
 import { offerFilters, type OfferFilter } from "@/data/offers";
 import type { Offer } from "@/types/landing";
+import { getEffectiveDiscountPercent } from "@/types/merchant";
 
 type SortMode = "newest" | "expiring";
 
@@ -75,6 +75,18 @@ export function OffersPageContent({
     return list;
   }, [offers, query, activeFilter, sortMode]);
 
+  /** Same ranking as the homepage hero: top 3 by effective discount %. */
+  const heroOffers = useMemo(() => {
+    return [...offers]
+      .sort((a, b) => {
+        const diff =
+          getEffectiveDiscountPercent(b) - getEffectiveDiscountPercent(a);
+        if (diff !== 0) return diff;
+        return b.id.localeCompare(a.id);
+      })
+      .slice(0, 3);
+  }, [offers]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageItems = filtered.slice(
@@ -84,7 +96,7 @@ export function OffersPageContent({
 
   return (
     <main className="mx-auto flex w-full max-w-[914px] flex-col gap-6 px-4 pb-10 pt-5 sm:px-6 sm:pt-6">
-      <HeroCarousel slides={heroSlides} />
+      <HeroCarousel offers={heroOffers} />
 
       <form
         role="search"
